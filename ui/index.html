@@ -21,6 +21,9 @@ button.go{background:var(--ink);color:var(--bg);border-color:var(--ink);font-wei
 .verdict .big{font-size:34px;font-weight:800;letter-spacing:.02em}
 .PASS{background:var(--pass-bg);color:var(--pass);border-color:var(--pass)}.FAIL{background:var(--fail-bg);color:var(--fail);border-color:var(--fail)}
 .INCONCLUSIVE{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}.NEEDS_CLARIFICATION,.RUNNING{background:var(--info-bg);color:var(--info);border-color:var(--info)}
+.verdict.partial{border-style:dashed;border-color:var(--warn)}
+.chip{margin-left:14px;vertical-align:middle;font-size:14px;font-weight:800;padding:3px 10px;border-radius:6px;background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn)}
+.warnline{margin-top:10px;padding:8px 10px;border-radius:8px;background:var(--warn-bg);color:var(--warn);font-weight:600}
 .badge{display:inline-block;border-radius:999px;padding:1px 9px;font-size:12px;font-weight:700;border:1px solid}
 .VERIFIED{background:var(--pass-bg);color:var(--pass);border-color:var(--pass)}.FAILED{background:var(--fail-bg);color:var(--fail);border-color:var(--fail)}
 .NOT_CHECKED,.NOT_VERIFIED{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}
@@ -89,18 +92,22 @@ function render(run) {
   const verified = scope.filter(s => s.status === 'VERIFIED');
 
   // verdict banner: the verdict comes from the verifier's record, never from the model's text
-  const v = h('div', { class: 'verdict ' + state }, h('div', { class: 'big' }, state.replace('_', ' ')), h('div', {}, SAYS[state]));
-  if (state === 'PASS' && scope.length) {
-    v.append(h('div', { style: 'margin-top:8px;font-weight:600' },
-      verified.length === scope.length ? `All ${scope.length} declared requirements are covered by passing checks.`
-        : `Only ${verified.length} of ${scope.length} declared requirements are covered by a check that ran. Passing is not the same as fully verified.`));
+  const partial = state === 'PASS' && !(last && last.fully_verified);   // the verdict stays PASS; only the framing changes
+  const v = h('div', { class: 'verdict ' + state + (partial ? ' partial' : '') },
+    h('div', { class: 'big' }, state.replace('_', ' '), partial ? h('span', { class: 'chip' }, 'NOT FULLY VERIFIED') : null), h('div', {}, SAYS[state]));
+  if (partial) {
+    v.append(h('div', { class: 'warnline' }, scope.length
+      ? `Only ${verified.length} of ${scope.length} declared requirements are covered by a check that ran. The verifier accepted this run; that does not mean the requirement is met.`
+      : 'No requirements are declared for this run, so what was actually verified is unknown.'));
+  } else if (state === 'PASS') {
+    v.append(h('div', { style: 'margin-top:8px;font-weight:600' }, `All ${scope.length} declared requirements are covered by passing checks.`));
   }
   $('verdict').replaceChildren(v);
 
   // scope of the evidence
   const sc = $('scope'); sc.replaceChildren();
   if (scope.length) {
-    const li = (s) => h('li', {}, h('span', { class: 'badge ' + s.status }, s.status.replace('_', ' ')), ' ', s.text, h('span', { class: 'mute mono' }, ' ← ' + s.checks.join(', ')));
+    const li = (s) => h('li', {}, h('span', { class: 'badge ' + s.status }, s.status.replace('_', ' ')), ' ', s.text, h('span', { class: 'mute mono' }, ' ← ' + s.checks.join(', ')), s.status === 'NOT_CHECKED' ? h('b', {}, ' — its check did not run') : s.status === 'NOT_VERIFIED' ? h('b', {}, ' — its checks are incomplete') : null);
     sc.append(h('section', { class: 'card' }, h('h2', {}, 'Scope of the evidence'), h('div', { class: 'cols' },
       h('div', {}, h('b', {}, 'Checked'), h('ul', {}, verified.map(li)), verified.length ? null : h('div', { class: 'mute' }, 'Nothing is verified yet.')),
       h('div', {}, h('b', {}, 'Not demonstrated'), h('ul', {}, scope.filter(s => s.status !== 'VERIFIED').map(li),

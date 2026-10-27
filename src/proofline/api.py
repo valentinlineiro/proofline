@@ -82,4 +82,4 @@ def run(run_id: str) -> dict:
 
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(ROOT / "ui" / "index.html")
+    return FileResponse(ROOT / "ui" / "index.html", headers={"Cache-Control": "no-store"})
