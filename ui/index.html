@@ -122,7 +122,7 @@ const SAYS = {
 };
 const ICON = { PASS: '✓', FAIL: '✕', INCONCLUSIVE: '!', NEEDS_CLARIFICATION: '?' };
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-let timer = null, loaded = null, announced = '', busy = false, shownState = null;
+let timer = null, loaded = null, announced = '', busy = false, shownState = null, lastSig = null;
 
 async function api(path, opts) { const r = await fetch(path, opts); if (!r.ok) throw new Error(((await r.json().catch(() => ({}))).detail) || r.status); return r.json(); }
 const setBusy = b => { busy = b; syncGo(); };
@@ -149,6 +149,9 @@ function summarize(recs) {                          // everything shown in the b
 }
 
 function render(run) {
+  const sig = [run.run_id, run.records.length, run.running, run.chain_valid].join('|');
+  if (sig === lastSig) return;   // nothing new: repainting would collapse any <details> the user has open
+  lastSig = sig;
   const recs = run.records;
   const task = recs.find(r => r.kind === 'task');
   if (task && loaded !== run.run_id) {               // the form always shows the task of the run on screen
@@ -254,7 +257,7 @@ function emptyState() {
 }
 
 async function poll(id) {
-  clearInterval(timer); loaded = null; shownState = null;
+  clearInterval(timer); loaded = null; shownState = null; lastSig = null;
   const tick = async () => { const run = await api('/api/runs/' + id); render(run); if (!run.running) { clearInterval(timer); setBusy(false); loadHistory(); } };
   await tick(); timer = setInterval(tick, 1000);
 }
