@@ -19,7 +19,8 @@ ACCEPTANCE_CLASS = "AcceptanceDiscountTest"
 CHECKS = [
     ("maven_tests", "!Acceptance*"),
     ("acceptance_discount_applies", f"{ACCEPTANCE_CLASS}#shouldApplyTenPercentWhenSubtotalExceedsLimit"),
-    ("acceptance_discount_boundary", f"{ACCEPTANCE_CLASS}#shouldNotDiscountWhenSubtotalEqualsLimit"),
+    ("acceptance_discount_rounding", f"{ACCEPTANCE_CLASS}#shouldRoundHalfUpToCentsWhenDiscountLeavesFractionOfCent"),
+    ("acceptance_discount_boundary",f"{ACCEPTANCE_CLASS}#shouldNotDiscountWhenSubtotalEqualsLimit"),
 ]
 
 

@@ -12,6 +12,8 @@ from .verifier import verify
 from .workspace import ALLOWED, EditRejected, apply_edits
 
 MAX_REPAIRS = 2
+DEFAULT_TASK = ("Apply a 10% discount when the subtotal is strictly greater than 100. "
+                "The returned total must be rounded to 2 decimals using HALF_UP (round half away from zero).")
 
 
 def _inconclusive(log: EvidenceLog, run_id: str, evidence_file: Path, error: str) -> dict:
@@ -20,10 +22,19 @@ def _inconclusive(log: EvidenceLog, run_id: str, evidence_file: Path, error: str
     return {"run_id": run_id, "verdict": "INCONCLUSIVE", "error": error, "evidence_file": str(evidence_file)}
 
 
-def run_task(task: str, base: Path, workspace: Path, evidence_file: Path, run_id: str = "run") -> dict:
+def run_task(task: str, base: Path, workspace: Path, evidence_file: Path, run_id: str = "run",
+             verify_first: bool = False) -> dict:
+    """verify_first: controlled-demo mode. The workspace starts with a prepared defect; the verifier judges it
+    before the model is asked, and the model repairs from that real evidence (does not consume an attempt)."""
     log = EvidenceLog(evidence_file)
     feedback = ""
     result: dict = {}
+    if verify_first:
+        log.append("seeded_workspace", note="workspace started from a prepared defect, not a model edit")
+        result = verify(base, workspace, evidence_file, f"{run_id}.seed", log=log)
+        if result["verdict"] != "FAIL":
+            return result
+        feedback = "\n".join(f"[{f['name']}]\n{f['tail']}" for f in result["failures"])
     for attempt in range(1 + MAX_REPAIRS):
         files = {p: (workspace / p).read_text() for p in ALLOWED}
         try:
@@ -52,7 +63,16 @@ if __name__ == "__main__":
     from .verifier import ROOT
     load_dotenv()
     base = ROOT / "fixtures" / "discount-service"
+    # usage: agent_loop [--seed NAME] [TASK]   (--seed = controlled demo with a prepared defect)
+    args = sys.argv[1:]
+    seed = None
+    if args[:1] == ["--seed"]:
+        seed, args = args[1], args[2:]
+    task = args[0] if args else DEFAULT_TASK
     with tempfile.TemporaryDirectory(prefix="proofline-ws-") as tmp:
         ws = Path(tmp) / "ws"
         shutil.copytree(base, ws)
-        print(json.dumps(run_task(sys.argv[1], base, ws, ROOT / "evidence" / "run-002.jsonl", "run-002"), indent=2))
+        if seed:
+            shutil.copytree(ROOT / "fixtures" / "seeds" / seed, ws, dirs_exist_ok=True)
+        name = f"run-{seed or 'autonomous'}"
+        print(json.dumps(run_task(task, base, ws, ROOT / "evidence" / f"{name}.jsonl", name, verify_first=bool(seed)), indent=2))

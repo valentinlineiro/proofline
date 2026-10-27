@@ -14,7 +14,7 @@ OLD = "return subtotal;"
 
 
 def impl(op):
-    return f'if (subtotal.compareTo(new BigDecimal("100")) {op} 0) {{ return subtotal.multiply(new BigDecimal("0.90")); }} return subtotal;'
+    return f'if (subtotal.compareTo(new BigDecimal("100")) {op} 0) {{ return subtotal.multiply(new BigDecimal("0.90")).setScale(2, java.math.RoundingMode.HALF_UP); }} return subtotal;'
 
 
 def reply(old, new):
@@ -74,6 +74,17 @@ def test_shouldStopAfterTwoRepairsWhenModelKeepsFailing(tmp_path, ws):
         r = run_task("add discount", BASE, ws, tmp_path / "ev.jsonl")
     assert r["verdict"] == "FAIL"
     assert client.chat.completions.create.call_count == 3
+
+
+def test_shouldRepairSeededRoundingDefectUsingRealVerifierEvidence(tmp_path, ws):
+    shutil.copytree(ROOT / "fixtures" / "seeds" / "half-even", ws, dirs_exist_ok=True)
+    p, client = fake_client(reply("RoundingMode.HALF_EVEN", "RoundingMode.HALF_UP"))
+    with p:
+        r = run_task("round half up", BASE, ws, tmp_path / "ev.jsonl", verify_first=True)
+    assert r["verdict"] == "PASS" and r["run_id"] == "run.0"
+    assert client.chat.completions.create.call_count == 1  # the seeded verification did not consume an attempt
+    prompt = client.chat.completions.create.call_args.kwargs["messages"][1]["content"]
+    assert "expected: <90.05> but was: <90.04>" in prompt
 
 
 def test_shouldNotRepairWhenVerdictIsInconclusive(tmp_path, ws):
