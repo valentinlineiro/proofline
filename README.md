@@ -1,5 +1,7 @@
 # Proofline
 
+[![ci](https://github.com/valentinlineiro/proofline/actions/workflows/ci.yml/badge.svg)](https://github.com/valentinlineiro/proofline/actions/workflows/ci.yml)
+
 **An agent saying "done" is a claim. Proofline asks for evidence.**
 
 Proofline lets a coding agent (Meta's Muse Spark) change a Java/Maven project, then judges the change with checks that
