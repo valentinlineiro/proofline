@@ -1,0 +1,17 @@
+{
+  "id": "U2",
+  "title": "Incomplete verification: a mandatory check cannot produce a reliable result",
+  "requirement": "10% discount when subtotal > 100 (strict), total rounded HALF_UP to cents.",
+  "task": "Apply a 10% discount when the subtotal is strictly greater than 100. The returned total must be rounded to 2 decimals using HALF_UP (round half away from zero).",
+  "initial_state": "fixtures/discount-service (no discount implemented)",
+  "mandatory_checks": ["maven_tests", "acceptance_discount_applies", "acceptance_discount_rounding", "acceptance_discount_boundary"],
+  "fault": "acceptance_discount_boundary",
+  "known_defect": null,
+  "expected_verdict": "INCONCLUSIVE",
+  "rationale": "The implementation is correct, but the boundary check dies with a simulated infrastructure failure (docker exit 125). A check that did not run proves nothing: PASS is wrong, FAIL is wrong, INCONCLUSIVE is right, and the repair loop must not trigger.",
+  "expected_evidence": ["check:maven_tests=PASS", "check:acceptance_discount_boundary=INCONCLUSIVE", "verdict:INCONCLUSIVE", "chain_valid"],
+  "simulated_edit": {
+    "old": "return subtotal;",
+    "new": "if (subtotal.compareTo(new BigDecimal(\"100\")) > 0) { return subtotal.multiply(new BigDecimal(\"0.90\")).setScale(2, java.math.RoundingMode.HALF_UP); } return subtotal;"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "id": "U1",
+  "title": "Insufficient coverage: boundary defect invisible to the mandatory checks",
+  "requirement": "10% discount when subtotal > 100 (strict), total rounded HALF_UP to cents.",
+  "task": "Apply a 10% discount when the subtotal is strictly greater than 100. The returned total must be rounded to 2 decimals using HALF_UP (round half away from zero).",
+  "initial_state": "fixtures/discount-service (no discount implemented)",
+  "mandatory_checks": ["maven_tests", "acceptance_discount_applies"],
+  "fault": null,
+  "known_defect": "boundary uses >= so a subtotal of exactly 100.00 is discounted; only the nominal case (120 -> 108.00) is checked",
+  "expected_verdict": null,
+  "rationale": "Proofline has no notion of coverage: if the defect is present and no mandatory check exercises it, the current verifier will say PASS. That outcome is a false PASS and must be reported as a limitation, not hidden. Oracle = full acceptance suite run independently.",
+  "expected_evidence": ["check:maven_tests=PASS", "check:acceptance_discount_applies=PASS", "chain_valid"],
+  "simulated_edit": {
+    "old": "return subtotal;",
+    "new": "if (subtotal.compareTo(new BigDecimal(\"100\")) >= 0) { return subtotal.multiply(new BigDecimal(\"0.90\")).setScale(2, java.math.RoundingMode.HALF_UP); } return subtotal;"
+  }
+}

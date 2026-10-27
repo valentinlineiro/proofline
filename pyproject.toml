@@ -11,4 +11,4 @@ dev = ["pytest"]
 where = ["src"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
