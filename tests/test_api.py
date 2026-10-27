@@ -63,3 +63,10 @@ def test_shouldRecordRunErrorWhenTheRunCrashes(client, tmp_path):
                 break
             done.wait(0.05)
     assert any(r["kind"] == "run_error" for r in client.get(f"/api/runs/{run_id}").json()["records"])
+
+
+@pytest.mark.parametrize("task", ["", "   \n"])
+def test_shouldRejectEmptyTaskBeforeCallingTheModel(client, task):
+    with patch.object(api, "run_new") as run:
+        assert client.post("/api/runs", json={"task": task}).status_code == 422
+    assert run.call_count == 0

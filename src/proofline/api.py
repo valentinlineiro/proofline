@@ -8,7 +8,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints
+from typing import Annotated
 
 from .agent_loop import DEFAULT_TASK, run_new
 from .evidence import EvidenceLog, verify_chain
@@ -23,7 +24,7 @@ _lock = threading.Lock()         # one run at a time: each run uses Docker and t
 
 
 class StartRun(BaseModel):
-    task: str = DEFAULT_TASK
+    task: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)] = DEFAULT_TASK
     seed: str | None = None
 
 

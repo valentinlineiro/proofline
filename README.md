@@ -72,7 +72,7 @@ Without a key, a run ends `INCONCLUSIVE` with `MODEL_API_KEY is not set`; it nev
 ## Run
 
 ```bash
-.venv/bin/pytest -q                                   # 66 tests, ~2.5 min, needs Docker + the warm cache, no API key
+.venv/bin/pytest -q                                   # 68 tests, ~2.5 min, needs Docker + the warm cache, no API key
 .venv/bin/uvicorn proofline.api:app --port 8765       # then open http://localhost:8765
 ```
 
@@ -138,7 +138,7 @@ ui/index.html      single-page UI (no build step)
 fixtures/          discount-service (editable project) and seeds/ (prepared defects)
 acceptance-tests/  protected tests + requirements.json, injected by the verifier, outside the editable workspace
 evaluations/       task contracts, per-task oracles, harness, report, RESULTS.md
-tests/             66 tests (Docker is real; only the model API boundary is mocked)
+tests/             68 tests (Docker is real; only the model API boundary is mocked)
 ```
 
 Generated runs go to `evidence/` (git-ignored).

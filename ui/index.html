@@ -3,61 +3,106 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" href="data:,">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Cpath d='M8 16.5l5 5 11-11' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <title>Proofline</title>
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--ink:#14171f;--mute:#5b6372;--line:#dfe3ea;--pass:#0d7a3f;--pass-bg:#e4f5ea;--fail:#b3261e;--fail-bg:#fbe9e7;--warn:#8a5a00;--warn-bg:#fff2d6;--info:#1d4ed8;--info-bg:#e6edff;--code:#f0f2f6}
-@media (prefers-color-scheme:dark){:root{--bg:#0f1218;--card:#171b24;--ink:#e8ebf2;--mute:#9aa3b5;--line:#2a3040;--pass:#4cc38a;--pass-bg:#10281c;--fail:#ff8a80;--fail-bg:#33171a;--warn:#f2c14e;--warn-bg:#33290f;--info:#8fb0ff;--info-bg:#16213d;--code:#10141c}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
-main{max-width:980px;margin:0 auto;padding:20px 16px 60px}
-h1{font-size:22px;margin:0}h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin:0 0 10px}
-.tag{color:var(--mute);margin:2px 0 18px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
-textarea,select,button{font:inherit;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
-textarea{width:100%;min-height:64px;resize:vertical}
-.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
-button.go{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:600;cursor:pointer}button:disabled{opacity:.5;cursor:default}
-.verdict{border-radius:10px;padding:18px;margin-bottom:14px;border:1px solid}
-.verdict .big{font-size:34px;font-weight:800;letter-spacing:.02em}
+:root{color-scheme:light dark;--bg:#f6f7fb;--card:#fff;--ink:#14171f;--mute:#566074;--line:#e1e5ee;--code:#f1f3f8;--accent:#4f46e5;--accent-ink:#fff;--glow:rgba(79,70,229,.10);
+--pass:#0d7a3f;--pass-bg:#e4f5ea;--fail:#b3261e;--fail-bg:#fbe9e7;--warn:#8a5a00;--warn-bg:#fff2d6;--info:#1d4ed8;--info-bg:#e9efff;
+--shadow:0 1px 2px rgba(16,24,40,.05),0 6px 20px rgba(16,24,40,.06)}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1017;--card:#161a23;--ink:#e8ebf2;--mute:#9aa3b5;--line:#272d3b;--code:#0f131b;--accent:#8b8cf8;--accent-ink:#0f1218;--glow:rgba(139,140,248,.12);
+--pass:#4cc38a;--pass-bg:#10281c;--fail:#ff8a80;--fail-bg:#33171a;--warn:#f2c14e;--warn-bg:#33290f;--info:#8fb0ff;--info-bg:#16213d;--shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35)}}
+*{box-sizing:border-box}
+body{margin:0;color:var(--ink);font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;background:radial-gradient(900px 320px at 50% -120px,var(--glow),transparent) no-repeat,var(--bg);min-height:100vh}
+main{max-width:980px;margin:0 auto;padding:28px 16px 64px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+header{display:flex;align-items:center;gap:12px;margin-bottom:4px}
+.logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#6d63ff,#4338ca);display:grid;place-items:center;box-shadow:0 4px 12px rgba(79,70,229,.35)}
+h1{font-size:24px;letter-spacing:-.015em;margin:0;font-weight:800}
+.tag{color:var(--mute);margin:0 0 22px 46px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px;box-shadow:var(--shadow)}
+.label{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--mute);font-weight:700;margin:0 0 10px}
+textarea,select,button{font:inherit;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 12px;max-width:100%}
+textarea{width:100%;min-height:72px;resize:vertical;line-height:1.5}
+textarea:focus-visible,select:focus-visible,button:focus-visible,summary:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 50%,transparent);outline-offset:2px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}.row .push{margin-left:auto}
+@media(max-width:640px){.row .push{margin-left:0}.row>*{flex:1 1 100%}}
+button.go{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700;cursor:pointer;padding:9px 22px;transition:transform .08s,filter .15s}
+button.go:hover:not(:disabled){filter:brightness(1.08)}button.go:active:not(:disabled){transform:translateY(1px)}button:disabled{opacity:.45;cursor:default}
+.mute{color:var(--mute)}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}
+
+/* verdict */
+.verdict{display:flex;gap:18px;align-items:flex-start;border-radius:14px;padding:20px;margin-bottom:16px;border:1px solid}.verdict.enter{animation:rise .3s ease both}
+.verdict .icon{flex:none;width:56px;height:56px;border-radius:50%;display:grid;place-items:center;font-size:28px;font-weight:800;border:2px solid currentColor;background:color-mix(in srgb,currentColor 12%,transparent)}
+.verdict .big{font-size:36px;line-height:1.1;font-weight:850;letter-spacing:.01em;display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.verdict .says{margin-top:4px}
 .PASS{background:var(--pass-bg);color:var(--pass);border-color:var(--pass)}.FAIL{background:var(--fail-bg);color:var(--fail);border-color:var(--fail)}
 .INCONCLUSIVE{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}.NEEDS_CLARIFICATION,.RUNNING{background:var(--info-bg);color:var(--info);border-color:var(--info)}
 .verdict.partial{border-style:dashed;border-color:var(--warn)}
-.chip{margin-left:14px;vertical-align:middle;font-size:14px;font-weight:800;padding:3px 10px;border-radius:6px;background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn)}
-.warnline{margin-top:10px;padding:8px 10px;border-radius:8px;background:var(--warn-bg);color:var(--warn);font-weight:600}
-.badge{display:inline-block;border-radius:999px;padding:1px 9px;font-size:12px;font-weight:700;border:1px solid}
-.VERIFIED{background:var(--pass-bg);color:var(--pass);border-color:var(--pass)}.FAILED{background:var(--fail-bg);color:var(--fail);border-color:var(--fail)}
-.NOT_CHECKED,.NOT_VERIFIED{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}
-.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:700px){.cols{grid-template-columns:1fr}}
-.mute{color:var(--mute)}.mono{font-family:ui-monospace,monospace;font-size:12.5px}
-ul{margin:6px 0 0;padding-left:18px}li{margin:3px 0}
-.step{border-left:3px solid var(--line);padding:2px 0 2px 14px;margin:0 0 14px}
-.step.model{border-color:var(--info)}.step.verify{border-color:var(--mute)}.step.warn{border-color:var(--warn)}
-.claim{font-size:12px;color:var(--info);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
-table{width:100%;border-collapse:collapse;margin-top:6px}td,th{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);font-size:14px}
-pre{background:var(--code);border-radius:8px;padding:10px;overflow:auto;max-height:260px;margin:6px 0;font-size:12px}
-details summary{cursor:pointer;color:var(--mute)}
+.chip{font-size:13px;font-weight:800;padding:3px 10px;border-radius:7px;background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn);letter-spacing:.03em}
+.reason{margin-top:12px;padding:10px 12px;border-radius:10px;font-weight:600;background:color-mix(in srgb,currentColor 10%,transparent)}
+.reason.quote{font-weight:500;font-size:17px;border-left:4px solid currentColor;border-radius:4px 10px 10px 4px}
+.stats{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.stat{font-size:12.5px;font-weight:600;padding:2px 10px;border-radius:999px;border:1px solid color-mix(in srgb,currentColor 40%,transparent);background:color-mix(in srgb,var(--card) 55%,transparent)}
+.spin{width:26px;height:26px;border:3px solid color-mix(in srgb,currentColor 25%,transparent);border-top-color:currentColor;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.spin,.verdict.enter{animation:none}}
+@media(max-width:520px){.verdict{flex-direction:column;gap:10px}.verdict .big{font-size:30px}}
+
+/* scope */
+.bar{display:flex;gap:4px;margin:2px 0 14px}.bar i{flex:1;height:9px;border-radius:5px;background:var(--line)}
+.bar i.VERIFIED{background:var(--pass)}.bar i.FAILED{background:var(--fail)}.bar i.NOT_CHECKED,.bar i.NOT_VERIFIED{background:var(--warn);opacity:.55}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}.cols>div{min-width:0}@media(max-width:700px){.cols{grid-template-columns:1fr}}
+.badge{display:inline-block;border-radius:999px;padding:1px 9px;font-size:12px;font-weight:700;border:1px solid;white-space:nowrap}
+.VERIFIED.badge{background:var(--pass-bg);color:var(--pass);border-color:var(--pass)}.FAILED.badge{background:var(--fail-bg);color:var(--fail);border-color:var(--fail)}
+.NOT_CHECKED.badge,.NOT_VERIFIED.badge{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}
+ul{margin:8px 0 0;padding-left:18px}li{margin:6px 0}
+
+/* timeline */
+.tl{margin-left:6px}
+.step{position:relative;padding:0 0 20px 24px;border-left:2px solid var(--line);--dot:var(--mute)}
+.step:last-child{border-left-color:transparent;padding-bottom:0}
+.step::before{content:"";position:absolute;left:-8px;top:3px;width:14px;height:14px;border-radius:50%;background:var(--dot);border:3px solid var(--card)}
+.step.model{--dot:var(--info)}.step.verify{--dot:var(--ink)}.step.warn{--dot:var(--warn)}
+.claim{font-size:12px;color:var(--info);font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+.bubble{margin-top:6px;padding:10px 12px;border-radius:10px;background:var(--info-bg);border:1px solid color-mix(in srgb,var(--info) 30%,transparent)}
+.scroll{overflow-x:auto;margin-top:8px;border:1px solid var(--line);border-radius:10px}
+table{width:100%;min-width:430px;border-collapse:collapse;table-layout:fixed}
+th:nth-child(2){width:132px}th:nth-child(3){width:56px}th:nth-child(4){width:76px}
+td,th{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);font-size:14px;overflow-wrap:anywhere}tr:last-child td{border-bottom:0}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);background:var(--code)}
+pre{background:var(--code);border-radius:10px;padding:10px 12px;overflow:auto;max-height:260px;margin:8px 0;font-size:12px;line-height:1.45}
+details{margin-top:8px}summary{cursor:pointer;color:var(--mute);padding:6px 0;border-radius:6px}
 .add{color:var(--pass)}.del{color:var(--fail)}
+.pill{display:inline-flex;flex-wrap:wrap;gap:2px 8px;align-items:center;border:1px solid var(--line);border-radius:14px;padding:3px 12px;background:var(--card)}
+
+/* empty state */
+.legend{display:grid;gap:10px;margin-top:6px}.legend>div{display:flex;gap:12px;align-items:baseline}
+.legend b{flex:none;min-width:174px;font-size:13px}@media(max-width:560px){.legend>div{flex-direction:column;gap:2px}}
 </style>
 </head>
 <body>
 <main>
-  <h1>Proofline</h1>
+  <header>
+    <div class="logo" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 32 32"><path d="M8 16.5l5 5 11-11" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <h1>Proofline</h1>
+  </header>
   <p class="tag">An agent saying “done” is a claim. The checks below are the evidence.</p>
 
   <section class="card">
-    <h2>Task</h2>
+    <label class="label" for="task">Task for the agent</label>
     <textarea id="task"></textarea>
     <div class="row">
-      <select id="mode"><option value="">Autonomous run</option></select>
+      <select id="mode" aria-label="Run mode"><option value="">Autonomous run</option></select>
       <button class="go" id="go">Run</button>
-      <select id="history"><option value="">Previous runs…</option></select>
-      <span class="mute" id="note"></span>
+      <select id="history" class="push" aria-label="Open a previous run"><option value="">Previous runs…</option></select>
+      <span class="mute" id="note" role="alert"></span>
     </div>
   </section>
 
+  <div id="live" class="sr" role="status" aria-live="polite"></div>
   <div id="verdict"></div>
   <div id="scope"></div>
-  <section class="card"><h2>What happened</h2><div id="timeline" class="mute">Start a run or open a previous one.</div></section>
+  <section class="card"><h2 class="label">What happened</h2><div id="timeline"></div></section>
   <p class="mute mono" id="chain"></p>
 </main>
 <script>
@@ -65,7 +110,7 @@ const $ = id => document.getElementById(id);
 const h = (tag, attrs = {}, ...kids) => {            // DOM builder: text is never interpreted as HTML
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) k === 'class' ? e.className = v : e.setAttribute(k, v);
-  for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(c));
+  for (const c of kids.flat()) if (c != null && c !== false) e.append(c.nodeType ? c : document.createTextNode(c));
   return e;
 };
 const SAYS = {
@@ -73,76 +118,144 @@ const SAYS = {
   FAIL: 'At least one mandatory check failed. The change is rejected.',
   INCONCLUSIVE: 'A required check could not produce a reliable result. Nothing is claimed about the code.',
   NEEDS_CLARIFICATION: 'The requirements are incomplete. The agent asked instead of guessing.',
-  RUNNING: 'Running…'
+  RUNNING: 'Verifying with independent checks…'
 };
-let timer = null, current = null;
+const ICON = { PASS: '✓', FAIL: '✕', INCONCLUSIVE: '!', NEEDS_CLARIFICATION: '?' };
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+let timer = null, loaded = null, announced = '', busy = false, shownState = null;
 
-async function api(path, opts) { const r = await fetch(path, opts); if (!r.ok) throw new Error((await r.json()).detail || r.status); return r.json(); }
+async function api(path, opts) { const r = await fetch(path, opts); if (!r.ok) throw new Error(((await r.json().catch(() => ({}))).detail) || r.status); return r.json(); }
+const setBusy = b => { busy = b; syncGo(); };
+const syncGo = () => { $('go').disabled = busy || !$('task').value.trim(); };
 
 function colorDiff(text) {
   return h('pre', {}, text.split('\n').map(l => h('div', { class: l.startsWith('+') && !l.startsWith('+++') ? 'add' : l.startsWith('-') && !l.startsWith('---') ? 'del' : '' }, l || ' ')));
 }
 
+function summarize(recs) {                          // everything shown in the banner is derived from the evidence records
+  const verifs = []; let edits = 0;
+  for (const r of recs) {
+    if (r.kind === 'run_start') verifs.push([]);
+    else if (r.kind === 'check' && verifs.length) verifs[verifs.length - 1].push(r);
+    else if (r.kind === 'model_edits') edits++;
+  }
+  const last = verifs[verifs.length - 1] || [];
+  const names = st => last.filter(c => c.status === st).map(c => c.name).join(', ');
+  const rejected = recs.filter(r => r.kind === 'edit_rejected').pop();
+  const problem = recs.filter(r => r.kind === 'model_error' || r.kind === 'run_error').pop();
+  const question = recs.find(r => r.kind === 'clarification_request');
+  return { verifs, edits, last, failing: names('FAIL'), inconclusive: names('INCONCLUSIVE'), rejected, problem, question,
+           passed: last.filter(c => c.status === 'PASS').length };
+}
+
 function render(run) {
   const recs = run.records;
+  const task = recs.find(r => r.kind === 'task');
+  if (task && loaded !== run.run_id) {               // the form always shows the task of the run on screen
+    loaded = run.run_id;
+    $('task').value = task.task;
+    $('mode').value = task.seeded ? ($('mode').options[1] ? $('mode').options[1].value : '') : '';
+    syncGo();
+  }
   const verdicts = recs.filter(r => r.kind === 'verdict');
   const last = verdicts[verdicts.length - 1];
   const state = run.running ? 'RUNNING' : last ? last.verdict : (recs.some(r => r.kind === 'model_error' || r.kind === 'run_error') ? 'INCONCLUSIVE' : 'RUNNING');
   const scope = last && last.scope || [];
   const verified = scope.filter(s => s.status === 'VERIFIED');
+  const S = summarize(recs);
 
   // verdict banner: the verdict comes from the verifier's record, never from the model's text
   const partial = state === 'PASS' && !(last && last.fully_verified);   // the verdict stays PASS; only the framing changes
-  const v = h('div', { class: 'verdict ' + state + (partial ? ' partial' : '') },
-    h('div', { class: 'big' }, state.replace('_', ' '), partial ? h('span', { class: 'chip' }, 'NOT FULLY VERIFIED') : null), h('div', {}, SAYS[state]));
-  if (partial) {
-    v.append(h('div', { class: 'warnline' }, scope.length
-      ? `Only ${verified.length} of ${scope.length} declared requirements are covered by a check that ran. The verifier accepted this run; that does not mean the requirement is met.`
-      : 'No requirements are declared for this run, so what was actually verified is unknown.'));
-  } else if (state === 'PASS') {
-    v.append(h('div', { style: 'margin-top:8px;font-weight:600' }, `All ${scope.length} declared requirements are covered by passing checks.`));
+  let reason = null, spoken = '';
+  if (state === 'PASS') {
+    reason = partial
+      ? h('div', { class: 'reason', style: 'background:var(--warn-bg);color:var(--warn)' }, scope.length
+          ? `Only ${verified.length} of ${scope.length} declared requirements are covered by a check that ran. The verifier accepted this run; that does not mean the requirement is met.`
+          : 'No requirements are declared for this run, so what was actually verified is unknown.')
+      : h('div', { class: 'reason' }, `All ${scope.length} declared requirements are covered by passing checks.`);
+    spoken = partial ? `Not fully verified: ${verified.length} of ${scope.length} requirements covered.` : 'All declared requirements covered.';
+  } else if (state === 'FAIL') {
+    const t = S.rejected && !S.verifs.length ? `The backend rejected the proposed edits: ${S.rejected.reason}`
+      : `Rejected after ${plural(S.verifs.length, 'verification')}. Still failing: ${S.failing || 'see the checks below'}.`;
+    reason = h('div', { class: 'reason' }, t); spoken = t;
+  } else if (state === 'INCONCLUSIVE') {
+    const t = S.inconclusive ? `Could not run reliably: ${S.inconclusive}. No claim is made about the code.`
+      : S.problem ? `Run problem: ${S.problem.error}.` : 'No reliable result was produced.';
+    reason = h('div', { class: 'reason' }, t); spoken = t;
+  } else if (state === 'NEEDS_CLARIFICATION' && S.question) {
+    reason = h('div', { class: 'reason quote' }, '“' + S.question.question + '”'); spoken = S.question.question;
   }
+  const stats = [];
+  if (S.verifs.length) stats.push(plural(S.verifs.length, 'verification'));
+  if (S.last.length) stats.push(`${S.passed}/${S.last.length} checks passed`);
+  if (S.edits) stats.push(plural(S.edits, 'model attempt'));
+  if (task && task.seeded) stats.push('staged scenario');
+  const v = h('div', { class: 'verdict ' + state + (partial ? ' partial' : '') + (state !== shownState ? ' enter' : '') },
+    h('div', { class: 'icon', 'aria-hidden': 'true' }, state === 'RUNNING' ? h('div', { class: 'spin' }) : ICON[state]),
+    h('div', { style: 'min-width:0;flex:1' },
+      h('div', { class: 'big' }, state.replace('_', ' '), partial ? h('span', { class: 'chip' }, 'NOT FULLY VERIFIED') : null),
+      h('div', { class: 'says' }, SAYS[state]), reason,
+      stats.length ? h('div', { class: 'stats' }, stats.map(s => h('span', { class: 'stat' }, s))) : null));
+  shownState = state;
   $('verdict').replaceChildren(v);
+  const announce = state === 'RUNNING' ? '' : `Verdict ${state.replace('_', ' ')}. ${spoken}`;
+  if (announce && announce !== announced) { announced = announce; $('live').textContent = announce; }
 
   // scope of the evidence
   const sc = $('scope'); sc.replaceChildren();
   if (scope.length) {
-    const li = (s) => h('li', {}, h('span', { class: 'badge ' + s.status }, s.status.replace('_', ' ')), ' ', s.text, h('span', { class: 'mute mono' }, ' ← ' + s.checks.join(', ')), s.status === 'NOT_CHECKED' ? h('b', {}, ' — its check did not run') : s.status === 'NOT_VERIFIED' ? h('b', {}, ' — its checks are incomplete') : null);
-    sc.append(h('section', { class: 'card' }, h('h2', {}, 'Scope of the evidence'), h('div', { class: 'cols' },
-      h('div', {}, h('b', {}, 'Checked'), h('ul', {}, verified.map(li)), verified.length ? null : h('div', { class: 'mute' }, 'Nothing is verified yet.')),
-      h('div', {}, h('b', {}, 'Not demonstrated'), h('ul', {}, scope.filter(s => s.status !== 'VERIFIED').map(li),
-        h('li', {}, 'Any property of the code that no check exercises.'))))));
+    const li = s => h('li', {}, h('span', { class: 'badge ' + s.status }, s.status.replace('_', ' ')), ' ', s.text,
+      h('span', { class: 'mute mono' }, ' ← ' + s.checks.join(', ')),
+      s.status === 'NOT_CHECKED' ? h('b', {}, ' — its check did not run') : s.status === 'NOT_VERIFIED' ? h('b', {}, ' — its checks are incomplete') : null);
+    sc.append(h('section', { class: 'card' }, h('h2', { class: 'label' }, `Scope of the evidence · ${verified.length} of ${scope.length} requirements verified`),
+      h('div', { class: 'bar', 'aria-hidden': 'true' }, scope.map(s => h('i', { class: s.status, title: s.text }))),
+      h('div', { class: 'cols' },
+        h('div', {}, h('b', {}, 'Checked'), h('ul', {}, verified.map(li)), verified.length ? null : h('div', { class: 'mute' }, 'Nothing is verified yet.')),
+        h('div', {}, h('b', {}, 'Not demonstrated'), h('ul', {}, scope.filter(s => s.status !== 'VERIFIED').map(li),
+          h('li', {}, 'Any property of the code that no check exercises.'))))));
   }
 
   // timeline, in the order things actually happened
-  const tl = $('timeline'); tl.replaceChildren(); tl.className = '';
-  let n = 0;
+  const tl = $('timeline'); tl.replaceChildren();
+  if (!recs.length) { tl.append(emptyState()); tl.className = ''; }
+  else tl.className = 'tl';
+  let n = 0, tbody = null, vbox = null;
   for (const r of recs) {
-    if (r.kind === 'task') tl.append(h('div', { class: 'step' }, h('b', {}, 'Task'), ': ', r.task, r.seeded ? h('div', {}, h('span', { class: 'badge NOT_CHECKED' }, 'SEEDED DEFECT'), ' the workspace starts from a prepared defect; this is a staged scenario, not a spontaneous model error.') : null));
-    else if (r.kind === 'model_edits') tl.append(h('div', { class: 'step model' }, h('div', { class: 'claim' }, `Model proposal (attempt ${r.attempt + 1}) — a claim, not evidence`), h('div', {}, r.proposal.summary || '(no summary)'), h('div', { class: 'mute' }, `${r.proposal.edits.length} edit(s)`)));
-    else if (r.kind === 'clarification_request') tl.append(h('div', { class: 'step model' }, h('div', { class: 'claim' }, 'Model asks for clarification'), h('div', {}, r.question)));
+    if (r.kind === 'task') tl.append(h('div', { class: 'step' }, h('b', {}, 'Task'), ': ', r.task, r.seeded ? h('div', { style: 'margin-top:6px' }, h('span', { class: 'badge NOT_CHECKED' }, 'SEEDED DEFECT'), ' the workspace starts from a prepared defect; this is a staged scenario, not a spontaneous model error.') : null));
+    else if (r.kind === 'model_edits') tl.append(h('div', { class: 'step model' }, h('div', { class: 'claim' }, `Model proposal (attempt ${r.attempt + 1}) — a claim, not evidence`), h('div', { class: 'bubble' }, r.proposal.summary || '(no summary)', h('div', { class: 'mute' }, plural(r.proposal.edits.length, 'edit')))));
+    else if (r.kind === 'clarification_request') tl.append(h('div', { class: 'step model' }, h('div', { class: 'claim' }, 'Model asks for clarification'), h('div', { class: 'bubble' }, r.question)));
     else if (r.kind === 'edit_rejected') tl.append(h('div', { class: 'step warn' }, h('b', {}, 'Edit rejected by the backend'), ': ', r.reason));
     else if (r.kind === 'model_error' || r.kind === 'run_error') tl.append(h('div', { class: 'step warn' }, h('b', {}, 'Run problem'), ': ', r.error));
     else if (r.kind === 'run_start') {
-      n++; const rows = [];
-      tl.append(h('div', { class: 'step verify', id: 'ver' + n }, h('b', {}, `Independent verification #${n}`),
+      n++; tbody = h('tbody');
+      vbox = h('div', { class: 'step verify' }, h('b', {}, `Independent verification #${n}`),
         h('div', { class: 'mute mono' }, `base ${r.base_revision.slice(0, 12)} · diff ${r.diff_sha256.slice(0, 12)}`),
         h('details', {}, h('summary', {}, 'Diff against the base'), r.diff ? colorDiff(r.diff) : h('div', { class: 'mute' }, 'No changes.')),
-        h('table', { id: 'tbl' + n }, h('tr', {}, h('th', {}, 'Check'), h('th', {}, 'Result'), h('th', {}, 'Exit'), h('th', {}, 'Time')))));
-    } else if (r.kind === 'check') {
-      const t = $('tbl' + n) || tl.lastChild; if (!t) continue;
-      t.append(h('tr', {}, h('td', {}, r.name), h('td', {}, h('span', { class: 'badge ' + (r.status === 'PASS' ? 'VERIFIED' : r.status === 'FAIL' ? 'FAILED' : 'NOT_VERIFIED') }, r.status)), h('td', {}, String(r.exit_code)), h('td', {}, r.duration_s != null ? r.duration_s + ' s' : '')));
-      if (r.status !== 'PASS' && r.stdout_tail) t.parentNode.append(h('details', {}, h('summary', {}, `Real output of ${r.name}`), h('pre', {}, r.stdout_tail)));
+        h('div', { class: 'scroll' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Check'), h('th', {}, 'Result'), h('th', {}, 'Exit'), h('th', {}, 'Time'))), tbody)));
+      tl.append(vbox);
+    } else if (r.kind === 'check' && tbody) {
+      tbody.append(h('tr', {}, h('td', {}, r.name), h('td', {}, h('span', { class: 'badge ' + (r.status === 'PASS' ? 'VERIFIED' : r.status === 'FAIL' ? 'FAILED' : 'NOT_VERIFIED') }, r.status)), h('td', {}, String(r.exit_code)), h('td', {}, r.duration_s != null ? r.duration_s + ' s' : '')));
+      if (r.status !== 'PASS' && r.stdout_tail) vbox.append(h('details', {}, h('summary', {}, `Real output of ${r.name}`), h('pre', {}, r.stdout_tail)));
     }
   }
-  if (run.running) tl.append(h('div', { class: 'mute' }, 'Working…'));
+  if (run.running && recs.length) tl.append(h('div', { class: 'step' }, h('span', { class: 'mute' }, 'Working…')));
   const tail = recs.length ? recs[recs.length - 1].sha256 : null;
-  $('chain').textContent = tail ? `Evidence chain ${run.chain_valid ? 'valid' : 'INVALID'} · head ${tail.slice(0, 16)}… · ${run.run_id}` : '';
+  $('chain').replaceChildren(tail ? h('span', { class: 'pill' }, run.chain_valid ? '🔗 Evidence chain valid' : '⚠ Evidence chain INVALID', h('span', { class: 'mute' }, `· head ${tail.slice(0, 12)}… · ${run.run_id}`)) : '');
+}
+
+function emptyState() {
+  const row = (cls, name, text) => h('div', {}, h('b', {}, h('span', { class: 'badge ' + cls }, name)), h('span', { class: 'mute' }, text));
+  return h('div', {}, h('p', { class: 'mute', style: 'margin:0 0 12px' }, 'Start a run, or open a previous one. Every verdict comes from independent checks, never from the agent’s own account.'),
+    h('div', { class: 'legend' },
+      row('VERIFIED', 'PASS', 'every mandatory check ran and passed — with an explicit scope of what that covers'),
+      row('FAILED', 'FAIL', 'a mandatory check failed; the agent gets the real output and may repair (up to 2 times)'),
+      row('NOT_CHECKED', 'INCONCLUSIVE', 'a required check could not run reliably; nothing is claimed, nothing is repaired'),
+      row('NOT_VERIFIED', 'NEEDS CLARIFICATION', 'the requirements are incomplete; the agent asked instead of guessing')));
 }
 
 async function poll(id) {
-  clearInterval(timer); current = id;
-  const tick = async () => { const run = await api('/api/runs/' + id); render(run); if (!run.running) { clearInterval(timer); $('go').disabled = false; loadHistory(); } };
+  clearInterval(timer); loaded = null; shownState = null;
+  const tick = async () => { const run = await api('/api/runs/' + id); render(run); if (!run.running) { clearInterval(timer); setBusy(false); loadHistory(); } };
   await tick(); timer = setInterval(tick, 1000);
 }
 
@@ -152,18 +265,19 @@ async function loadHistory() {
 }
 
 $('go').onclick = async () => {
-  $('go').disabled = true; $('note').textContent = '';
+  setBusy(true); $('note').textContent = '';
   try {
     const r = await api('/api/runs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ task: $('task').value, seed: $('mode').value || null }) });
     poll(r.run_id);
-  } catch (e) { $('note').textContent = e.message; $('go').disabled = false; }
+  } catch (e) { $('note').textContent = e.message; setBusy(false); }
 };
+$('task').oninput = syncGo;
 $('history').onchange = e => e.target.value && poll(e.target.value);
 
 (async () => {
   $('task').value = 'Apply a 10% discount when the subtotal is strictly greater than 100. The returned total must be rounded to 2 decimals using HALF_UP (round half away from zero).';
   for (const s of await api('/api/seeds')) $('mode').append(h('option', { value: s }, `Staged scenario: seeded defect “${s}”`));
-  loadHistory();
+  $('timeline').append(emptyState()); syncGo(); loadHistory();
 })();
 </script>
 </body>
