@@ -142,3 +142,7 @@ tests/             68 tests (Docker is real; only the model API boundary is mock
 ```
 
 Generated runs go to `evidence/` (git-ignored).
+
+## License
+
+MIT, see [LICENSE](LICENSE).
