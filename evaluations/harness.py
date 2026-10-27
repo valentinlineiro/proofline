@@ -63,10 +63,30 @@ def classify_outcome(verdict: str, oracle_violated: bool, fault_injected: bool, 
     return "UNEXPECTED_INCONCLUSIVE"
 
 
-def _fake_model(edit: dict[str, str]):
-    reply = json.dumps({"summary": "simulated", "edits": [{"path": ALLOWED[0], "old": edit["old"], "new": edit["new"]}]})
+def fake_tool_message(name: str | None, args: dict | str | None = None, text: str | None = None) -> MagicMock:
+    """An API message holding one tool call (or none, with `text`). The only thing simulated is the model API boundary."""
+    msg = MagicMock(content=text)
+    if name is None:
+        msg.tool_calls = []
+    else:
+        call = MagicMock()
+        call.function.name = name
+        call.function.arguments = args if isinstance(args, str) else json.dumps(args)
+        msg.tool_calls = [call]
+    return msg
+
+
+def fake_client(*messages) -> MagicMock:
     c = MagicMock()
-    c.chat.completions.create.return_value.choices = [MagicMock(message=MagicMock(content=reply))]
+    c.chat.completions.create.side_effect = [
+        m if isinstance(m, Exception) else MagicMock(choices=[MagicMock(message=m)]) for m in messages]
+    return c
+
+
+def _fake_model(edit: dict[str, str]):
+    args = {"summary": "simulated", "edits": [{"path": ALLOWED[0], "old": edit["old"], "new": edit["new"]}]}
+    c = MagicMock()
+    c.chat.completions.create.return_value.choices = [MagicMock(message=fake_tool_message("apply_edits", args))]
     return patch.object(model_client, "OpenAI", return_value=c)
 
 

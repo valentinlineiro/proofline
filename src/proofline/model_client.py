@@ -1,4 +1,5 @@
-"""Muse Spark via Meta Model API (OpenAI-compatible). Proposes structured edits only: no shell, no verdicts."""
+"""Muse Spark via Meta Model API (OpenAI-compatible), using native tool calling.
+The model proposes through exactly one tool call: structured edits OR one clarification question. No shell, no verdicts."""
 import json
 import os
 
@@ -11,7 +12,7 @@ BASE_URL = "https://api.meta.ai/v1"
 
 
 class ModelError(Exception):
-    """API failure, timeout, or a response that does not match the schema."""
+    """API failure, timeout, or a response that is not exactly one valid tool call."""
 
 
 class EditSet(BaseModel):
@@ -27,16 +28,44 @@ class EditSet(BaseModel):
         return self
 
 
+TOOLS = [
+    {"type": "function", "function": {
+        "name": "apply_edits",
+        "description": "Replace text in the editable file. Each `old` must occur exactly once in the file.",
+        "parameters": {"type": "object", "properties": {
+            "summary": {"type": "string", "description": "One or two sentences: what you changed and any assumption you made."},
+            "edits": {"type": "array", "items": {"type": "object", "properties": {
+                "path": {"type": "string"}, "old": {"type": "string"}, "new": {"type": "string"}},
+                "required": ["path", "old", "new"]}}},
+            "required": ["summary", "edits"]}}},
+    {"type": "function", "function": {
+        "name": "ask_clarification",
+        "description": "Ask ONE specific question when the task lacks information essential to implement it.",
+        "parameters": {"type": "object", "properties": {"question": {"type": "string"}}, "required": ["question"]}}},
+]
+
 SYSTEM = (
-    "You are a coding agent changing a Java/Maven repository. Reply with ONLY a JSON object: "
-    '{"summary": str, "edits": [{"path": str, "old": str, "new": str}]}. '
-    "Each edit replaces the text `old`, which must occur exactly once in the file, with `new`. "
-    "Edit only the files you are shown. You cannot run code and you do not decide whether the change is correct; "
-    "an independent verifier does. If given failing check output, fix the code accordingly. "
-    "If the task lacks information essential to implement it (numbers, thresholds, method signature or rules are not "
-    'stated), do not guess: reply with ONLY {"clarification": "<one specific question>"}. '
+    "You are a coding agent changing a Java/Maven repository. Call exactly one tool: `apply_edits` to change code, or "
+    "`ask_clarification` if the task lacks information essential to implement it (numbers, thresholds, method signature or "
+    "rules are not stated): do not guess. Edit only the files you are shown. You cannot run code and you do not decide "
+    "whether the change is correct; an independent verifier does. If given failing check output, fix the code accordingly. "
     "For a minor ambiguity, pick the most reasonable reading and state that assumption in `summary`."
 )
+
+
+def _from_tool_calls(calls: list) -> EditSet:
+    if len(calls) != 1:
+        raise ModelError("expected exactly one tool call")
+    name, raw = calls[0].function.name, calls[0].function.arguments
+    try:
+        args = json.loads(raw)
+        if name == "apply_edits":
+            return EditSet.model_validate(args)
+        if name == "ask_clarification":
+            return EditSet(clarification=args["question"])
+    except (json.JSONDecodeError, ValidationError, KeyError, TypeError):
+        raise ModelError("tool call arguments did not match the schema") from None
+    raise ModelError("unknown tool")
 
 
 def propose_edits(task: str, files: dict[str, str], feedback: str = "", timeout_s: float = 60) -> EditSet:
@@ -50,12 +79,11 @@ def propose_edits(task: str, files: dict[str, str], feedback: str = "", timeout_
     client = OpenAI(api_key=key, base_url=BASE_URL, timeout=timeout_s, max_retries=1)
     try:
         resp = client.chat.completions.create(
-            model=model, messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}])
-        text = resp.choices[0].message.content or ""
+            model=model, tools=TOOLS, tool_choice="auto",  # the API only supports "auto": a text-only reply must fail closed
+            messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}])
+        calls = list(resp.choices[0].message.tool_calls or [])
     except Exception as e:  # SDK errors can echo request details; keep only the type
         raise ModelError(f"model call failed: {type(e).__name__}") from None
-    try:
-        text = text.strip().removeprefix("```json").removeprefix("```").removesuffix("```")
-        return EditSet.model_validate(json.loads(text))
-    except (json.JSONDecodeError, ValidationError):
-        raise ModelError("model response did not match the edit schema") from None
+    if not calls:
+        raise ModelError("model did not call a tool")
+    return _from_tool_calls(calls)

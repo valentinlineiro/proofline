@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from evaluations.harness import fake_client as _client
+from evaluations.harness import fake_tool_message
 from proofline import model_client
 from proofline.agent_loop import run_task
 from proofline.verifier import ROOT
@@ -21,11 +23,22 @@ def reply(old, new):
     return json.dumps({"summary": "s", "edits": [{"path": ALLOWED[0], "old": old, "new": new}]})
 
 
+def to_message(r):
+    """Test replies stay readable as JSON; the model API boundary receives them as tool calls."""
+    if isinstance(r, Exception):
+        return r
+    try:
+        d = json.loads(r)
+    except ValueError:
+        return fake_tool_message(None, text=r)  # plain text: no tool call
+    if isinstance(d, dict) and set(d) == {"clarification"}:
+        return fake_tool_message("ask_clarification", {"question": d["clarification"]})
+    return fake_tool_message("apply_edits", d)  # malformed arguments reach schema validation on purpose
+
+
 def fake_client(*responses):
-    """Mock only the model API boundary. Each response is a string (content) or an exception."""
-    c = MagicMock()
-    c.chat.completions.create.side_effect = [
-        r if isinstance(r, Exception) else MagicMock(choices=[MagicMock(message=MagicMock(content=r))]) for r in responses]
+    """Mock only the model API boundary. Each response is a JSON string (edits or clarification), text, or an exception."""
+    c = _client(*[to_message(r) for r in responses])
     return patch.object(model_client, "OpenAI", return_value=c), c
 
 
