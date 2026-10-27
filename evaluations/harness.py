@@ -1,6 +1,7 @@
 """Evaluation harness. Runs a task through the unmodified agent loop + verifier, then judges the outcome with an
 independent oracle (the full acceptance suite, run separately). The agent only ever sees `task`, never the rest."""
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -19,7 +20,7 @@ from proofline.verifier import ROOT, verify
 from proofline.workspace import ALLOWED
 
 TASKS = Path(__file__).parent / "tasks"
-OUT = ROOT / "evidence" / "eval"
+OUT = Path(os.environ.get("PROOFLINE_EVAL_OUT", ROOT / "evidence" / "eval"))
 BASE = ROOT / "fixtures" / "discount-service"
 
 
@@ -117,7 +118,8 @@ def run_one(t: EvalTask, model: str, n: int) -> dict:
             "oracle_verdict": oracle["verdict"], "outcome": outcome, "attempts": len(edits),
             "expected_verdict": t.expected_verdict, "clarification_required": t.clarification_required,
             "missing_evidence": None if model == "sim-bad" else sorted(set(t.expected_evidence) - _evidence_facts(OUT / f"{name}.jsonl")),
-            "model_summary": edits[-1]["summary"] if edits else None}
+            "model_summary": edits[-1]["summary"] if edits else None,
+            "question": next((r["question"] for r in recs if r["kind"] == "clarification_request"), None)}
 
 
 if __name__ == "__main__":

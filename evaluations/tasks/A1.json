@@ -22,13 +22,12 @@
   ],
   "fault": null,
   "known_defect": null,
-  "expected_verdict": "PASS",
-  "rationale": "Genuinely underspecified: the right behaviour is to ask for clarification, but the agent has no channel to ask. The oracle can only guard existing behaviour, so a PASS says nothing about the loyalty rule.",
+  "expected_verdict": "NEEDS_CLARIFICATION",
+  "rationale": "Genuinely underspecified: the right behaviour is to ask for clarification instead of inventing a policy. Round 1 had no clarification channel (UNGROUNDED_PASS); since the NEEDS_CLARIFICATION contract the expected verdict is NEEDS_CLARIFICATION. If the agent implements anyway, a PASS stays UNGROUNDED_PASS: the oracle only guards existing behaviour.",
   "outcome_kind": "ungrounded",
   "clarification_required": true,
   "expected_evidence": [
-    "check:maven_tests=PASS",
-    "check:acceptance_a1=PASS",
+    "verdict:NEEDS_CLARIFICATION",
     "chain_valid"
   ],
   "simulated_edit": {

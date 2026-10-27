@@ -1,4 +1,8 @@
-# Evaluation results (round 1)
+# Evaluation results
+
+Round 1 (baseline, commit `ed7d1ea`) is below. Round 2 (after `NEEDS_CLARIFICATION` and requirement scope) is at the end.
+
+## Round 1
 
 Muse Spark 1.3 Contributor, real API; verifier and agent loop unmodified during the round. Raw evidence lives in
 `evidence/eval/` (git-ignored, hash-chained JSONL). Reproduce: `python -m evaluations.harness real 3 S1 S2 S3 E1 E2 E3 A1 A2`
@@ -52,3 +56,28 @@ Harness validation with a simulated model (not Muse Spark results): all 8 correc
 
 Explicit clarification request (`NEEDS_CLARIFICATION`, distinct from INCONCLUSIVE) and surfacing which requirement
 properties each verdict covers; then repeat the same battery.
+
+## Round 2: regression after the clarification contract
+
+Same battery, same model (Muse Spark 1.3 Contributor, real API), new system prompt that lets the model ask instead of
+guessing, plus `NEEDS_CLARIFICATION` and per-requirement scope in the verifier. Evidence in `evidence/eval-round2/`
+(round 1 kept untouched in `evidence/eval-round1/`).
+
+| Group | Round 1 | Round 2 |
+|---|---|---|
+| S1–S3 (9 runs) | 9 PASS, first attempt | 9 PASS, first attempt, no questions asked |
+| E1–E3 (9 runs) | 9 PASS, first attempt | 9 PASS, first attempt, no questions asked |
+| U1 (5 runs) | 5 PASS (no defect introduced) | 5 PASS (no defect introduced) |
+| U2 (5 runs) | 5 INCONCLUSIVE, no repair | 5 INCONCLUSIVE, no repair |
+| A2 (3 runs) | 3 × FAIL then PASS | 3 × FAIL then PASS (2 attempts) |
+| A1 (3 runs) | 3 `UNGROUNDED_PASS`: invented 10 % policy, extra scope | 3 `NEEDS_CLARIFICATION`: asked for the percentage, the signature and how a returning customer is identified; nothing implemented, nothing verified |
+
+What changed: only A1, and in the intended direction. What did not change: the 28 S/E/U runs show no
+unnecessary questions, the unresolved-boundary case (A2) still fails for real and is repaired from the verifier's output,
+and a check that cannot run still ends in INCONCLUSIVE. All evidence chains validate; no API key or oracle/hidden-intent
+strings appear in proposals or questions.
+
+Caveats: same small samples as round 1 (3–5 runs per task). The model asking in 3/3 A1 runs does not show it will always
+ask when it should, or never when it should not; it shows no regression on this battery. A2 is still resolved by the
+verifier's failure output, not by the model understanding the intent. The oracle limitations of round 1 still apply.
+A `NEEDS_CLARIFICATION` ends the run without verifying anything, so it carries no claim about code correctness.
