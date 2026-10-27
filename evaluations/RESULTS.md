@@ -96,8 +96,8 @@ API), same contracts. Evidence in `evidence/eval-round3/` (a sample is published
 | A2 (3 runs) | 3 × FAIL then PASS | 3 × FAIL then PASS (2 attempts) |
 | A1 (3 runs) | 3 `NEEDS_CLARIFICATION` | 3 `NEEDS_CLARIFICATION` |
 
-Outcomes are identical to round 2, run by run. In the 34 real runs there was no `model_error`: the model always produced exactly one
-well-formed tool call. All evidence chains validate; no API key or oracle/hidden-intent strings in proposals or questions.
+Outcomes are identical to round 2, run by run. The 34 real runs produced 37 model calls (the A2 repairs add 3; an A1 question counts as a call) and no
+`model_error`: every reply was exactly one well-formed tool call. All evidence chains validate; no API key or oracle/hidden-intent strings in proposals or questions.
 
 API behaviour observed: `tool_choice` accepts only `"auto"` (`"required"` and named choices return HTTP 400), so a text-only reply
 cannot be forced into a tool call. The client fails closed: no tool call, more than one, an unknown tool or invalid arguments end the run as

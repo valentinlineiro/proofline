@@ -109,10 +109,13 @@ per task, one fixture, two rounds:
 - A2 (ambiguous boundary): 3/3 failed for real first and were repaired from the verifier's output. This is evidence-guided repair,
   not understanding of intent.
 - A1 (underspecified): round 1, 3/3 invented a policy (`UNGROUNDED_PASS`); rounds 2 and 3, 3/3 asked for clarification.
-- Round 3 repeats the battery with native tool calling instead of prompt-level JSON: identical outcomes, no malformed model replies in 34 real runs.
+- Round 3 repeats the battery with native tool calling instead of prompt-level JSON: identical outcomes, no malformed model replies (34 real runs, 37 tool calls).
 - **Known false `PASS` (U1)** exists **only with a simulated defect**: when no mandatory check exercises a defect, the verifier
   accepts it and only the full suite catches it. With real Muse Spark, the model never introduced that defect, so no real false
   `PASS` was observed. That is not evidence that none can occur.
+
+Not to be confused with the test suite: the evaluation is the same 10-task battery run three times with the real model (34 runs per round, 102 runs in
+total). The automated suite is a separate set of 102 tests that needs no API key.
 
 Simulated-model runs (`sim`, `sim-bad`) validate the harness and the oracle, not Muse Spark. Reproduce the real battery with
 `.venv/bin/python -m evaluations.harness real 3 S1 S2 S3 E1 E2 E3 A1 A2` and `... real 5 U1 U2`.
