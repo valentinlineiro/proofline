@@ -1,0 +1,5 @@
+[
+  {"id": "R1", "text": "10% discount when the subtotal is above 100", "checks": ["acceptance_discount_applies"]},
+  {"id": "R2", "text": "No discount when the subtotal is exactly 100", "checks": ["acceptance_discount_boundary"]},
+  {"id": "R3", "text": "Total rounded HALF_UP to cents", "checks": ["acceptance_discount_rounding"]}
+]

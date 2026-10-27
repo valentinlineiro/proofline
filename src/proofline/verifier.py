@@ -1,4 +1,5 @@
 """Independent verifier: decides PASS / FAIL / INCONCLUSIVE from real Maven runs, never from the model."""
+import json
 import re
 import shutil
 import subprocess
@@ -42,6 +43,29 @@ def classify(r: RunResult) -> str:
     return "INCONCLUSIVE"  # e.g. dependency resolution failed: infra, not code
 
 
+def requirement_scope(requirements: list[dict], ran: dict[str, str]) -> list[dict]:
+    """What the evidence actually covers. `ran` maps each check that was part of this run to its status.
+    VERIFIED needs every mapped check to have run and passed; a requirement with no check that ran is NOT_CHECKED."""
+    scope = []
+    for r in requirements:
+        statuses = [ran[c] for c in r["checks"] if c in ran]
+        if not statuses:
+            status = "NOT_CHECKED"
+        elif "FAIL" in statuses:
+            status = "FAILED"
+        elif len(statuses) == len(r["checks"]) and set(statuses) == {"PASS"}:
+            status = "VERIFIED"
+        else:
+            status = "NOT_VERIFIED"
+        scope.append({"id": r["id"], "text": r["text"], "status": status, "checks": r["checks"]})
+    return scope
+
+
+def load_requirements() -> list[dict]:
+    f = ACCEPTANCE_DIR / "requirements.json"
+    return json.loads(f.read_text()) if f.exists() else []
+
+
 def tree_hash(d: Path) -> str:
     files = sorted(p for p in d.rglob("*") if p.is_file() and "target" not in p.parts)
     return sha256("".join(f"{p.relative_to(d)}:{sha256(p.read_bytes())}\n" for p in files))
@@ -62,8 +86,9 @@ def verify(base: Path, workspace: Path, evidence_file: Path, run_id: str = "run"
     outside = sorted(changed_files(base, workspace) - set(ALLOWED))
     if outside:  # defense in depth: the edit tool already blocks this, the verifier does not trust it
         log.append("check", name="allowlist", status="FAIL", exit_code=1, files=outside)
-        log.append("verdict", verdict="FAIL")
-        return {"run_id": run_id, "verdict": "FAIL", "base_revision": base_rev,
+        scope = requirement_scope(load_requirements(), {})
+        log.append("verdict", verdict="FAIL", scope=scope)
+        return {"run_id": run_id, "verdict": "FAIL", "base_revision": base_rev, "scope": scope, "fully_verified": False,
                 "checks": [Check("allowlist", "FAIL", 1).__dict__], "failures": [{"name": "allowlist", "tail": f"modified protected files: {outside}"}],
                 "diff_sha256": sha256(patch), "evidence_file": str(evidence_file)}
     failures: list[dict] = []
@@ -86,8 +111,10 @@ def verify(base: Path, workspace: Path, evidence_file: Path, run_id: str = "run"
 
     statuses = {c.status for c in checks}
     verdict = "FAIL" if "FAIL" in statuses else "INCONCLUSIVE" if "INCONCLUSIVE" in statuses else "PASS"
-    log.append("verdict", verdict=verdict)
-    return {"run_id": run_id, "verdict": verdict, "base_revision": base_rev, "checks": [c.__dict__ for c in checks], "failures": failures,
+    scope = requirement_scope(load_requirements(), {c.name: c.status for c in checks})
+    fully = verdict == "PASS" and bool(scope) and all(s["status"] == "VERIFIED" for s in scope)
+    log.append("verdict", verdict=verdict, scope=scope, fully_verified=fully)
+    return {"run_id": run_id, "verdict": verdict, "base_revision": base_rev, "scope": scope, "fully_verified": fully, "checks": [c.__dict__ for c in checks], "failures": failures,
             "diff_sha256": sha256(patch), "evidence_file": str(evidence_file)}
 
 

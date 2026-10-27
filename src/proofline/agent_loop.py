@@ -41,6 +41,13 @@ def run_task(task: str, base: Path, workspace: Path, evidence_file: Path, run_id
             proposal = model_client.propose_edits(task, files, feedback)
         except model_client.ModelError as e:
             return _inconclusive(log, run_id, evidence_file, str(e))
+        if proposal.clarification:
+            log.append("clarification_request", attempt=attempt, question=proposal.clarification)
+            if attempt == 0 and not verify_first:  # nothing was verified yet: requirements are incomplete
+                log.append("verdict", verdict="NEEDS_CLARIFICATION", question=proposal.clarification)
+                return {"run_id": run_id, "verdict": "NEEDS_CLARIFICATION", "question": proposal.clarification,
+                        "evidence_file": str(evidence_file)}
+            break  # asking after a failed verification must not erase the FAIL
         log.append("model_edits", attempt=attempt, proposal=proposal.model_dump())
         try:
             apply_edits(workspace, proposal.edits)

@@ -3,7 +3,7 @@ import json
 import os
 
 from openai import OpenAI
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, model_validator
 
 from .workspace import Edit
 
@@ -15,8 +15,16 @@ class ModelError(Exception):
 
 
 class EditSet(BaseModel):
-    summary: str
-    edits: list[Edit]
+    """Either edits or a clarification question, never both and never neither."""
+    summary: str = ""
+    edits: list[Edit] = []
+    clarification: str | None = None
+
+    @model_validator(mode="after")
+    def _edits_xor_clarification(self):
+        if bool(self.edits) == bool(self.clarification):
+            raise ValueError("reply with edits or a clarification, not both or neither")
+        return self
 
 
 SYSTEM = (
@@ -24,7 +32,10 @@ SYSTEM = (
     '{"summary": str, "edits": [{"path": str, "old": str, "new": str}]}. '
     "Each edit replaces the text `old`, which must occur exactly once in the file, with `new`. "
     "Edit only the files you are shown. You cannot run code and you do not decide whether the change is correct; "
-    "an independent verifier does. If given failing check output, fix the code accordingly."
+    "an independent verifier does. If given failing check output, fix the code accordingly. "
+    "If the task lacks information essential to implement it (numbers, thresholds, method signature or rules are not "
+    'stated), do not guess: reply with ONLY {"clarification": "<one specific question>"}. '
+    "For a minor ambiguity, pick the most reasonable reading and state that assumption in `summary`."
 )
 
 

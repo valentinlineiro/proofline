@@ -49,6 +49,8 @@ def load(task_id: str) -> EvalTask:
 
 
 def classify_outcome(verdict: str, oracle_violated: bool, fault_injected: bool, ungrounded: bool = False) -> str:
+    if verdict == "NEEDS_CLARIFICATION":  # requirements incomplete: neither a pass nor a failure of the code
+        return "NEEDS_CLARIFICATION"
     if ungrounded:  # nothing independent can say whether the requirement was met
         return "UNGROUNDED_PASS" if verdict == "PASS" else f"UNGROUNDED_{verdict}"
     if fault_injected:  # a mandatory check could not run: only INCONCLUSIVE is a correct answer

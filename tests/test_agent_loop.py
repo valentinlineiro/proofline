@@ -87,6 +87,31 @@ def test_shouldRepairSeededRoundingDefectUsingRealVerifierEvidence(tmp_path, ws)
     assert "expected: <90.05> but was: <90.04>" in prompt
 
 
+ASK = json.dumps({"clarification": "What percentage and which customers count as loyal?"})
+
+
+def test_shouldReturnNeedsClarificationWhenModelAsksBeforeAnyVerification(tmp_path, ws):
+    p, client = fake_client(ASK)
+    with p, patch("proofline.verifier.run_maven") as maven:
+        r = run_task("add a loyalty discount", BASE, ws, tmp_path / "ev.jsonl")
+    assert r["verdict"] == "NEEDS_CLARIFICATION" and "percentage" in r["question"]
+    assert maven.call_count == 0 and client.chat.completions.create.call_count == 1  # nothing verified, no loop
+
+
+def test_shouldKeepFailWhenModelAsksAfterAFailedVerification(tmp_path, ws):
+    p, client = fake_client(reply(OLD, impl(">=")), ASK)
+    with p:
+        r = run_task("add discount", BASE, ws, tmp_path / "ev.jsonl")
+    assert r["verdict"] == "FAIL"  # a question must not launder a real failure
+
+
+@pytest.mark.parametrize("content", ['{"summary": "x"}', json.dumps({"clarification": "q", "edits": [{"path": ALLOWED[0], "old": "a", "new": "b"}]})])
+def test_shouldReturnInconclusiveWhenReplyIsNeitherEditsNorExactlyOneQuestion(tmp_path, ws, content):
+    p, _ = fake_client(content)
+    with p:
+        assert run_task("t", BASE, ws, tmp_path / "ev.jsonl")["verdict"] == "INCONCLUSIVE"
+
+
 def test_shouldNotRepairWhenVerdictIsInconclusive(tmp_path, ws):
     from proofline.runner import RunResult
     p, client = fake_client(reply(OLD, impl(">")), reply(OLD, impl(">")), reply(OLD, impl(">")))

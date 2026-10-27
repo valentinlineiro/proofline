@@ -55,6 +55,32 @@ def test_shouldPassWhenImplementationIsCorrect(tmp_path):
     assert result["verdict"] == "PASS"
 
 
+def test_shouldReportFullyVerifiedOnlyWhenEveryRequirementCheckPassed(tmp_path):
+    result, _ = run(tmp_path, ">")
+    assert result["fully_verified"] is True
+    assert {s["status"] for s in result["scope"]} == {"VERIFIED"}
+
+
+def test_shouldNotClaimFullVerificationWhenMandatoryChecksLeaveRequirementsUnchecked(tmp_path):
+    from unittest.mock import patch
+    from proofline import verifier
+    subset = [c for c in verifier.CHECKS if c[0] in ("maven_tests", "acceptance_discount_applies")]
+    ws = workspace(tmp_path, ">=")  # boundary defect the reduced profile cannot see
+    with patch.object(verifier, "CHECKS", subset):
+        result = verify(BASE, ws, tmp_path / "ev.jsonl")
+    assert result["verdict"] == "PASS" and result["fully_verified"] is False
+    assert {s["id"]: s["status"] for s in result["scope"]} == {"R1": "VERIFIED", "R2": "NOT_CHECKED", "R3": "NOT_CHECKED"}
+
+
+def test_shouldMarkRequirementNotVerifiedWhenItsCheckWasInconclusive():
+    from proofline.verifier import requirement_scope
+    reqs = [{"id": "R", "text": "t", "checks": ["a", "b"]}]
+    assert requirement_scope(reqs, {"a": "PASS", "b": "INCONCLUSIVE"})[0]["status"] == "NOT_VERIFIED"
+    assert requirement_scope(reqs, {"a": "PASS"})[0]["status"] == "NOT_VERIFIED"  # one mapped check never ran
+    assert requirement_scope(reqs, {"a": "PASS", "b": "FAIL"})[0]["status"] == "FAILED"
+    assert requirement_scope(reqs, {})[0]["status"] == "NOT_CHECKED"
+
+
 def test_shouldFailOnlyRoundingCheckWhenHalfEvenIsUsed(tmp_path):
     ws = tmp_path / "ws"
     shutil.copytree(BASE, ws)
