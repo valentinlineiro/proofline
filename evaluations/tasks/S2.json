@@ -1,0 +1,42 @@
+{
+  "id": "S2",
+  "title": "Coupon",
+  "group": "simple",
+  "requirement": "applyCoupon: SAVE5 subtracts 5.00, floor at 0; other codes unchanged.",
+  "task": "Add a method `public BigDecimal applyCoupon(BigDecimal subtotal, String code)` to DiscountService. The code \"SAVE5\" subtracts 5.00 from the subtotal, but the result never goes below 0.00. Any other code (including null) returns the subtotal unchanged.",
+  "initial_state": "fixtures/discount-service (no discount implemented)",
+  "acceptance_dir": "evaluations/oracle/S2",
+  "checks": [
+    [
+      "maven_tests",
+      "!Acceptance*"
+    ],
+    [
+      "acceptance_s2",
+      "AcceptanceS2Test"
+    ]
+  ],
+  "mandatory_checks": [
+    "maven_tests",
+    "acceptance_s2"
+  ],
+  "fault": null,
+  "known_defect": "no floor at zero",
+  "expected_verdict": "PASS",
+  "rationale": "Explicit functional requirement with a floor.",
+  "outcome_kind": "oracle",
+  "clarification_required": false,
+  "expected_evidence": [
+    "check:maven_tests=PASS",
+    "check:acceptance_s2=PASS",
+    "chain_valid"
+  ],
+  "simulated_edit": {
+    "old": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }",
+    "new": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }\n\n    public BigDecimal applyCoupon(BigDecimal subtotal, String code) {\n        if (!\"SAVE5\".equals(code)) return subtotal;\n        return subtotal.subtract(new BigDecimal(\"5.00\")).max(BigDecimal.ZERO);\n    }"
+  },
+  "simulated_defective_edit": {
+    "old": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }",
+    "new": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }\n\n    public BigDecimal applyCoupon(BigDecimal subtotal, String code) {\n        if (!\"SAVE5\".equals(code)) return subtotal;\n        return subtotal.subtract(new BigDecimal(\"5.00\"));\n    }"
+  }
+}

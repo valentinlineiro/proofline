@@ -36,13 +36,21 @@ class EvalTask(BaseModel):
     rationale: str
     expected_evidence: list[str]
     simulated_edit: dict[str, str]
+    simulated_defective_edit: dict[str, str] | None = None
+    group: str = "adversarial"
+    acceptance_dir: str | None = None       # oracle tests for this task (None: the verifier's default)
+    checks: list[list[str]] | None = None   # full check list = the oracle (None: the verifier's default)
+    outcome_kind: str = "oracle"            # "ungrounded": no oracle can judge the requirement
+    clarification_required: bool = False
 
 
 def load(task_id: str) -> EvalTask:
     return EvalTask.model_validate_json((TASKS / f"{task_id}.json").read_text())
 
 
-def classify_outcome(verdict: str, oracle_violated: bool, fault_injected: bool) -> str:
+def classify_outcome(verdict: str, oracle_violated: bool, fault_injected: bool, ungrounded: bool = False) -> str:
+    if ungrounded:  # nothing independent can say whether the requirement was met
+        return "UNGROUNDED_PASS" if verdict == "PASS" else f"UNGROUNDED_{verdict}"
     if fault_injected:  # a mandatory check could not run: only INCONCLUSIVE is a correct answer
         return {"INCONCLUSIVE": "CORRECT_INCONCLUSIVE", "PASS": "FALSE_PASS"}.get(verdict, "UNEXPECTED_FAIL")
     if verdict == "PASS":
@@ -52,8 +60,8 @@ def classify_outcome(verdict: str, oracle_violated: bool, fault_injected: bool) 
     return "UNEXPECTED_INCONCLUSIVE"
 
 
-def _fake_model(t: EvalTask):
-    reply = json.dumps({"summary": "simulated", "edits": [{"path": ALLOWED[0], **{k: t.simulated_edit[k] for k in ("old", "new")}}]})
+def _fake_model(edit: dict[str, str]):
+    reply = json.dumps({"summary": "simulated", "edits": [{"path": ALLOWED[0], "old": edit["old"], "new": edit["new"]}]})
     c = MagicMock()
     c.chat.completions.create.return_value.choices = [MagicMock(message=MagicMock(content=reply))]
     return patch.object(model_client, "OpenAI", return_value=c)
@@ -79,7 +87,8 @@ def _evidence_facts(path: Path) -> set[str]:
 def run_one(t: EvalTask, model: str, n: int) -> dict:
     OUT.mkdir(parents=True, exist_ok=True)
     name = f"{t.id}-{model}-{n}"
-    full_checks = list(verifier.CHECKS)
+    full_checks = [tuple(c) for c in t.checks] if t.checks else list(verifier.CHECKS)
+    acceptance = ROOT / t.acceptance_dir if t.acceptance_dir else verifier.ACCEPTANCE_DIR
     profile = [c for c in full_checks if c[0] in t.mandatory_checks]
     fault_sel = dict(full_checks)[t.fault] if t.fault else None
     with tempfile.TemporaryDirectory(prefix="proofline-eval-") as tmp:
@@ -87,27 +96,37 @@ def run_one(t: EvalTask, model: str, n: int) -> dict:
         shutil.copytree(BASE, ws)
         with ExitStack() as stack:
             stack.enter_context(patch.object(verifier, "CHECKS", profile))
+            stack.enter_context(patch.object(verifier, "ACCEPTANCE_DIR", acceptance))
             if fault_sel:
                 stack.enter_context(_faulty_runner(fault_sel))
             if model == "sim":
-                stack.enter_context(_fake_model(t))
+                stack.enter_context(_fake_model(t.simulated_edit))
+            elif model == "sim-bad":
+                stack.enter_context(_fake_model(t.simulated_defective_edit))
             result = run_task(t.task, BASE, ws, OUT / f"{name}.jsonl", name)
-        # oracle: independent, unpatched, full suite on the final workspace
-        oracle = verify(BASE, ws, OUT / f"{name}.oracle.jsonl", f"{name}.oracle")
-    violated = oracle["verdict"] == "FAIL"
-    facts = _evidence_facts(OUT / f"{name}.jsonl")
-    outcome = classify_outcome(result["verdict"], violated, fault_sel is not None)
-    return {"task": t.id, "model": model, "run": n, "verdict": result["verdict"], "oracle_verdict": oracle["verdict"],
-            "outcome": outcome, "expected_verdict": t.expected_verdict,
-            "missing_evidence": sorted(set(t.expected_evidence) - facts)}
+        # oracle: independent, full suite on the final workspace, never seen by the agent
+        with patch.object(verifier, "CHECKS", full_checks), patch.object(verifier, "ACCEPTANCE_DIR", acceptance):
+            oracle = verify(BASE, ws, OUT / f"{name}.oracle.jsonl", f"{name}.oracle")
+    recs = [json.loads(l) for l in (OUT / f"{name}.jsonl").read_text().splitlines()]
+    edits = [r["proposal"] for r in recs if r["kind"] == "model_edits"]
+    outcome = classify_outcome(result["verdict"], oracle["verdict"] == "FAIL", fault_sel is not None,
+                               t.outcome_kind == "ungrounded")
+    return {"task": t.id, "group": t.group, "model": model, "run": n, "verdict": result["verdict"],
+            "oracle_verdict": oracle["verdict"], "outcome": outcome, "attempts": len(edits),
+            "expected_verdict": t.expected_verdict, "clarification_required": t.clarification_required,
+            "missing_evidence": None if model == "sim-bad" else sorted(set(t.expected_evidence) - _evidence_facts(OUT / f"{name}.jsonl")),
+            "model_summary": edits[-1]["summary"] if edits else None}
 
 
 if __name__ == "__main__":
-    # usage: python -m evaluations.harness sim|real [REPEAT] [TASK_ID ...]
+    # usage: python -m evaluations.harness sim|sim-bad|real [REPEAT] [TASK_ID ...]
     load_dotenv(ROOT / ".env")
     model, repeat = sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else 1
-    ids = sys.argv[3:] or ["U1", "U2"]
-    rows = [run_one(load(i), model, n) for i in ids for n in range(repeat)]
+    ids = sys.argv[3:] or [p.stem for p in sorted(TASKS.glob("*.json"))]
+    tasks = [load(i) for i in ids]
+    if model == "sim-bad":  # only tasks that have a known defective implementation
+        tasks = [t for t in tasks if t.simulated_defective_edit]
+    rows = [run_one(t, model, n) for t in tasks for n in range(repeat)]
     (OUT / f"summary-{model}.json").write_text(json.dumps(rows, indent=2))
     for r in rows:
         print(r)

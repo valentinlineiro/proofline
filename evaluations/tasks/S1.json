@@ -1,0 +1,42 @@
+{
+  "id": "S1",
+  "title": "Free shipping threshold",
+  "group": "simple",
+  "requirement": "shippingCost: 0.00 from 50.00 inclusive, else 4.99.",
+  "task": "Add a method `public BigDecimal shippingCost(BigDecimal subtotal)` to DiscountService. Shipping is free (0.00) when the subtotal is 50.00 or more; otherwise it costs 4.99.",
+  "initial_state": "fixtures/discount-service (no discount implemented)",
+  "acceptance_dir": "evaluations/oracle/S1",
+  "checks": [
+    [
+      "maven_tests",
+      "!Acceptance*"
+    ],
+    [
+      "acceptance_s1",
+      "AcceptanceS1Test"
+    ]
+  ],
+  "mandatory_checks": [
+    "maven_tests",
+    "acceptance_s1"
+  ],
+  "fault": null,
+  "known_defect": "threshold excluded (> instead of >=)",
+  "expected_verdict": "PASS",
+  "rationale": "Explicit functional requirement with an inclusive boundary.",
+  "outcome_kind": "oracle",
+  "clarification_required": false,
+  "expected_evidence": [
+    "check:maven_tests=PASS",
+    "check:acceptance_s1=PASS",
+    "chain_valid"
+  ],
+  "simulated_edit": {
+    "old": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }",
+    "new": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }\n\n    public BigDecimal shippingCost(BigDecimal subtotal) {\n        return subtotal.compareTo(new BigDecimal(\"50.00\")) >= 0 ? new BigDecimal(\"0.00\") : new BigDecimal(\"4.99\");\n    }"
+  },
+  "simulated_defective_edit": {
+    "old": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }",
+    "new": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }\n\n    public BigDecimal shippingCost(BigDecimal subtotal) {\n        return subtotal.compareTo(new BigDecimal(\"50.00\")) > 0 ? new BigDecimal(\"0.00\") : new BigDecimal(\"4.99\");\n    }"
+  }
+}

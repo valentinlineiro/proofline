@@ -1,0 +1,42 @@
+{
+  "id": "S3",
+  "title": "VAT",
+  "group": "simple",
+  "requirement": "totalWithVat: net * 1.21 rounded HALF_UP to 2 decimals.",
+  "task": "Add a method `public BigDecimal totalWithVat(BigDecimal net)` to DiscountService. It returns the net amount plus 21% VAT, rounded to 2 decimals using HALF_UP.",
+  "initial_state": "fixtures/discount-service (no discount implemented)",
+  "acceptance_dir": "evaluations/oracle/S3",
+  "checks": [
+    [
+      "maven_tests",
+      "!Acceptance*"
+    ],
+    [
+      "acceptance_s3",
+      "AcceptanceS3Test"
+    ]
+  ],
+  "mandatory_checks": [
+    "maven_tests",
+    "acceptance_s3"
+  ],
+  "fault": null,
+  "known_defect": "no rounding to 2 decimals",
+  "expected_verdict": "PASS",
+  "rationale": "Explicit functional requirement including the rounding rule.",
+  "outcome_kind": "oracle",
+  "clarification_required": false,
+  "expected_evidence": [
+    "check:maven_tests=PASS",
+    "check:acceptance_s3=PASS",
+    "chain_valid"
+  ],
+  "simulated_edit": {
+    "old": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }",
+    "new": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }\n\n    public BigDecimal totalWithVat(BigDecimal net) {\n        return net.multiply(new BigDecimal(\"1.21\")).setScale(2, java.math.RoundingMode.HALF_UP);\n    }"
+  },
+  "simulated_defective_edit": {
+    "old": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }",
+    "new": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }\n\n    public BigDecimal totalWithVat(BigDecimal net) {\n        return net.multiply(new BigDecimal(\"1.21\"));\n    }"
+  }
+}

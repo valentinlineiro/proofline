@@ -17,6 +17,19 @@ def test_shouldClassifyOutcomeWhenVerdictAndOracleAreKnown(verdict, violated, fa
     assert harness.classify_outcome(verdict, violated, fault) == expected
 
 
+@pytest.mark.parametrize("verdict,expected", [("PASS", "UNGROUNDED_PASS"), ("FAIL", "UNGROUNDED_FAIL")])
+def test_shouldNeverCountAsFunctionalSuccessWhenRequirementIsUngrounded(verdict, expected):
+    assert harness.classify_outcome(verdict, False, False, ungrounded=True) == expected
+
+
+@pytest.mark.parametrize("model,verdict,outcome", [("sim", "PASS", "TRUE_PASS"), ("sim-bad", "FAIL", "DETECTED")])
+def test_shouldDetectKnownRoundingDefectWhenOracleIsIndependentOfTheAgent(tmp_path, monkeypatch, model, verdict, outcome):
+    monkeypatch.setenv("MODEL_API_KEY", "x")
+    monkeypatch.setattr(harness, "OUT", tmp_path)
+    r = harness.run_one(harness.load("E3"), model, 0)
+    assert (r["verdict"], r["outcome"]) == (verdict, outcome)
+
+
 def test_shouldReportKnownFalsePassWhenDefectIsOutsideMandatoryChecks(tmp_path, monkeypatch):
     monkeypatch.setenv("MODEL_API_KEY", "x")
     monkeypatch.setattr(harness, "OUT", tmp_path)

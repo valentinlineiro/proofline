@@ -1,0 +1,42 @@
+{
+  "id": "E1",
+  "title": "Split a bill in cents",
+  "group": "edge",
+  "requirement": "splitEvenly: exact cent distribution, remainder to first shares, parts <= 0 rejected.",
+  "task": "Add a method `public java.util.List<BigDecimal> splitEvenly(BigDecimal total, int parts)` to DiscountService. It returns `parts` amounts, each with exactly 2 decimals, whose sum is exactly `total` (which has 2 decimals). Shares differ by at most 0.01 and any extra cents go to the first shares. `parts <= 0` throws IllegalArgumentException.",
+  "initial_state": "fixtures/discount-service (no discount implemented)",
+  "acceptance_dir": "evaluations/oracle/E1",
+  "checks": [
+    [
+      "maven_tests",
+      "!Acceptance*"
+    ],
+    [
+      "acceptance_e1",
+      "AcceptanceE1Test"
+    ]
+  ],
+  "mandatory_checks": [
+    "maven_tests",
+    "acceptance_e1"
+  ],
+  "fault": null,
+  "known_defect": "shares are rounded independently so their sum is not the total (100.00/3 -> 99.99)",
+  "expected_verdict": "PASS",
+  "rationale": "Rounding remainder edge cases and input validation.",
+  "outcome_kind": "oracle",
+  "clarification_required": false,
+  "expected_evidence": [
+    "check:maven_tests=PASS",
+    "check:acceptance_e1=PASS",
+    "chain_valid"
+  ],
+  "simulated_edit": {
+    "old": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }",
+    "new": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }\n\n    public java.util.List<BigDecimal> splitEvenly(BigDecimal total, int parts) {\n        if (parts <= 0) throw new IllegalArgumentException(\"parts must be positive\");\n        long cents = total.movePointRight(2).longValueExact();\n        java.util.List<BigDecimal> shares = new java.util.ArrayList<>();\n        for (int i = 0; i < parts; i++) {\n            long c = cents / parts + (i < cents % parts ? 1 : 0);\n            shares.add(BigDecimal.valueOf(c, 2));\n        }\n        return shares;\n    }"
+  },
+  "simulated_defective_edit": {
+    "old": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }",
+    "new": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }\n\n    public java.util.List<BigDecimal> splitEvenly(BigDecimal total, int parts) {\n        if (parts <= 0) throw new IllegalArgumentException(\"parts must be positive\");\n        BigDecimal share = total.divide(BigDecimal.valueOf(parts), 2, java.math.RoundingMode.HALF_UP);\n        return java.util.Collections.nCopies(parts, share);\n    }"
+  }
+}

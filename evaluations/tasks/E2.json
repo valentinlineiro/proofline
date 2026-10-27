@@ -1,0 +1,42 @@
+{
+  "id": "E2",
+  "title": "Checked total",
+  "group": "edge",
+  "requirement": "checkedTotal: strict >100 on the exact value, 10% off, HALF_UP to cents, invalid input rejected.",
+  "task": "Add a method `public BigDecimal checkedTotal(BigDecimal subtotal)` to DiscountService. If the subtotal is strictly greater than 100 it gets a 10% discount. The comparison with 100 uses the exact subtotal as given, before any rounding. The returned value is always rounded to 2 decimals using HALF_UP. A null or negative subtotal throws IllegalArgumentException.",
+  "initial_state": "fixtures/discount-service (no discount implemented)",
+  "acceptance_dir": "evaluations/oracle/E2",
+  "checks": [
+    [
+      "maven_tests",
+      "!Acceptance*"
+    ],
+    [
+      "acceptance_e2",
+      "AcceptanceE2Test"
+    ]
+  ],
+  "mandatory_checks": [
+    "maven_tests",
+    "acceptance_e2"
+  ],
+  "fault": null,
+  "known_defect": "subtotal is rounded before the comparison (100.005 -> 100.01 is discounted to 90.01 instead of 90.00)",
+  "expected_verdict": "PASS",
+  "rationale": "Extreme and boundary inputs, null/negative, huge values.",
+  "outcome_kind": "oracle",
+  "clarification_required": false,
+  "expected_evidence": [
+    "check:maven_tests=PASS",
+    "check:acceptance_e2=PASS",
+    "chain_valid"
+  ],
+  "simulated_edit": {
+    "old": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }",
+    "new": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }\n\n    public BigDecimal checkedTotal(BigDecimal subtotal) {\n        if (subtotal == null || subtotal.signum() < 0) throw new IllegalArgumentException(\"invalid subtotal\");\n        BigDecimal total = subtotal.compareTo(new BigDecimal(\"100\")) > 0 ? subtotal.multiply(new BigDecimal(\"0.90\")) : subtotal;\n        return total.setScale(2, java.math.RoundingMode.HALF_UP);\n    }"
+  },
+  "simulated_defective_edit": {
+    "old": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }",
+    "new": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }\n\n    public BigDecimal checkedTotal(BigDecimal subtotal) {\n        if (subtotal == null || subtotal.signum() < 0) throw new IllegalArgumentException(\"invalid subtotal\");\n        BigDecimal s = subtotal.setScale(2, java.math.RoundingMode.HALF_UP);\n        BigDecimal total = s.compareTo(new BigDecimal(\"100\")) > 0 ? s.multiply(new BigDecimal(\"0.90\")) : s;\n        return total.setScale(2, java.math.RoundingMode.HALF_UP);\n    }"
+  }
+}

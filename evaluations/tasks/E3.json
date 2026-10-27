@@ -1,0 +1,42 @@
+{
+  "id": "E3",
+  "title": "Bulk line total",
+  "group": "edge",
+  "requirement": "bulkLineTotal: line total, 5% off from qty 10, rounded once HALF_UP, invalid lines rejected.",
+  "task": "Add a method `public BigDecimal bulkLineTotal(BigDecimal unitPrice, int qty)` to DiscountService. It returns unitPrice * qty. If qty is 10 or more, a 5% discount applies to the line total. Round only the final line total, once, to 2 decimals using HALF_UP (do not round per unit). A null or negative unitPrice or qty <= 0 throws IllegalArgumentException.",
+  "initial_state": "fixtures/discount-service (no discount implemented)",
+  "acceptance_dir": "evaluations/oracle/E3",
+  "checks": [
+    [
+      "maven_tests",
+      "!Acceptance*"
+    ],
+    [
+      "acceptance_e3",
+      "AcceptanceE3Test"
+    ]
+  ],
+  "mandatory_checks": [
+    "maven_tests",
+    "acceptance_e3"
+  ],
+  "fault": null,
+  "known_defect": "discounted unit price rounded per unit (0.99 x 10 -> 9.40 instead of 9.41)",
+  "expected_verdict": "PASS",
+  "rationale": "Where the rounding happens changes the cents.",
+  "outcome_kind": "oracle",
+  "clarification_required": false,
+  "expected_evidence": [
+    "check:maven_tests=PASS",
+    "check:acceptance_e3=PASS",
+    "chain_valid"
+  ],
+  "simulated_edit": {
+    "old": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }",
+    "new": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }\n\n    public BigDecimal bulkLineTotal(BigDecimal unitPrice, int qty) {\n        if (unitPrice == null || unitPrice.signum() < 0 || qty <= 0) throw new IllegalArgumentException(\"invalid line\");\n        BigDecimal line = unitPrice.multiply(BigDecimal.valueOf(qty));\n        if (qty >= 10) line = line.multiply(new BigDecimal(\"0.95\"));\n        return line.setScale(2, java.math.RoundingMode.HALF_UP);\n    }"
+  },
+  "simulated_defective_edit": {
+    "old": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }",
+    "new": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }\n\n    public BigDecimal bulkLineTotal(BigDecimal unitPrice, int qty) {\n        if (unitPrice == null || unitPrice.signum() < 0 || qty <= 0) throw new IllegalArgumentException(\"invalid line\");\n        BigDecimal unit = qty >= 10 ? unitPrice.multiply(new BigDecimal(\"0.95\")).setScale(2, java.math.RoundingMode.HALF_UP) : unitPrice;\n        return unit.multiply(BigDecimal.valueOf(qty)).setScale(2, java.math.RoundingMode.HALF_UP);\n    }"
+  }
+}

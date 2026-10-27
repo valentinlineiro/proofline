@@ -1,0 +1,39 @@
+{
+  "id": "A1",
+  "title": "Loyalty discount (underspecified)",
+  "group": "ambiguous",
+  "requirement": "No threshold, percentage, signature or eligibility rule is given.",
+  "task": "Add a loyalty discount for returning customers to DiscountService.",
+  "initial_state": "fixtures/discount-service (no discount implemented)",
+  "acceptance_dir": "evaluations/oracle/A1",
+  "checks": [
+    [
+      "maven_tests",
+      "!Acceptance*"
+    ],
+    [
+      "acceptance_a1",
+      "AcceptanceA1Test"
+    ]
+  ],
+  "mandatory_checks": [
+    "maven_tests",
+    "acceptance_a1"
+  ],
+  "fault": null,
+  "known_defect": null,
+  "expected_verdict": "PASS",
+  "rationale": "Genuinely underspecified: the right behaviour is to ask for clarification, but the agent has no channel to ask. The oracle can only guard existing behaviour, so a PASS says nothing about the loyalty rule.",
+  "outcome_kind": "ungrounded",
+  "clarification_required": true,
+  "expected_evidence": [
+    "check:maven_tests=PASS",
+    "check:acceptance_a1=PASS",
+    "chain_valid"
+  ],
+  "simulated_edit": {
+    "old": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }",
+    "new": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }\n\n    public BigDecimal loyaltyTotal(BigDecimal subtotal) {\n        return subtotal.multiply(new BigDecimal(\"0.95\")).setScale(2, java.math.RoundingMode.HALF_UP);\n    }"
+  },
+  "simulated_defective_edit": null
+}

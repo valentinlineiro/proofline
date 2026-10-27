@@ -1,0 +1,42 @@
+{
+  "id": "A2",
+  "title": "Over 100 euros (ambiguous boundary)",
+  "group": "ambiguous",
+  "requirement": "bundleTotal: hidden intent = 10% off from 100.00 inclusive, HALF_UP to cents.",
+  "task": "Orders over 100 euros get 10% off. Add a method `public BigDecimal bundleTotal(BigDecimal subtotal)` to DiscountService that returns the discounted total rounded to cents.",
+  "initial_state": "fixtures/discount-service (no discount implemented)",
+  "acceptance_dir": "evaluations/oracle/A2",
+  "checks": [
+    [
+      "maven_tests",
+      "!Acceptance*"
+    ],
+    [
+      "acceptance_a2",
+      "AcceptanceA2Test"
+    ]
+  ],
+  "mandatory_checks": [
+    "maven_tests",
+    "acceptance_a2"
+  ],
+  "fault": null,
+  "known_defect": "the natural reading (strict >) contradicts the hidden business intent (>=)",
+  "expected_verdict": "PASS",
+  "rationale": "A reasonable interpretation may differ from the hidden intent. A PASS after a repair means the verifier's evidence resolved the ambiguity, not that the agent understood the requirement. attempts > 1 is the signal.",
+  "outcome_kind": "oracle",
+  "clarification_required": false,
+  "expected_evidence": [
+    "check:maven_tests=PASS",
+    "check:acceptance_a2=PASS",
+    "chain_valid"
+  ],
+  "simulated_edit": {
+    "old": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }",
+    "new": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }\n\n    public BigDecimal bundleTotal(BigDecimal subtotal) {\n        BigDecimal t = subtotal.compareTo(new BigDecimal(\"100\")) >= 0 ? subtotal.multiply(new BigDecimal(\"0.90\")) : subtotal;\n        return t.setScale(2, java.math.RoundingMode.HALF_UP);\n    }"
+  },
+  "simulated_defective_edit": {
+    "old": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }",
+    "new": "    public BigDecimal total(BigDecimal subtotal) {\n        return subtotal;\n    }\n\n    public BigDecimal bundleTotal(BigDecimal subtotal) {\n        BigDecimal t = subtotal.compareTo(new BigDecimal(\"100\")) > 0 ? subtotal.multiply(new BigDecimal(\"0.90\")) : subtotal;\n        return t.setScale(2, java.math.RoundingMode.HALF_UP);\n    }"
+  }
+}
