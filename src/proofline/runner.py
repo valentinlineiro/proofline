@@ -9,14 +9,14 @@ from pathlib import Path
 IMAGE = "maven:3.9-eclipse-temurin-21"
 
 
-M2_VOLUME = "proofline-m2"
+M2_VOLUME = os.environ.get("PROOFLINE_M2_VOLUME", "proofline-m2")
 
 
 def warm_cache(fixture: Path) -> None:
     """Only step with network: downloads every dependency into the m2 volume. Runs rw, outside any check."""
     subprocess.run(["docker", "run", "--rm", "-v", f"{fixture.resolve()}:/src:ro", "-v", f"{M2_VOLUME}:/m2",
                     IMAGE, "sh", "-c",
-                    "cp -r /src /w && cd /w && mvn -B -Dmaven.repo.local=/m2 dependency:go-offline test -DskipTests"],
+                    "cp -r /src /w && cd /w && mvn -B -Dmaven.repo.local=/m2 dependency:go-offline test"],
                    check=True)
 
 
@@ -43,3 +43,7 @@ def run_maven(workdir: Path, args: list[str], timeout_s: int = 300) -> RunResult
         subprocess.run(["docker", "kill", name], capture_output=True)
         out = (e.stdout or b"").decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
         return RunResult(-1, out, time.monotonic() - start, timed_out=True)
+
+
+if __name__ == "__main__":  # python -m proofline.runner : one-time, networked download of the Maven dependencies
+    warm_cache(Path(__file__).resolve().parents[2] / "fixtures" / "discount-service")

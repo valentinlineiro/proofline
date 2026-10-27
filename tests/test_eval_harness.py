@@ -24,14 +24,14 @@ def test_shouldNeverCountAsFunctionalSuccessWhenRequirementIsUngrounded(verdict,
 
 @pytest.mark.parametrize("model,verdict,outcome", [("sim", "PASS", "TRUE_PASS"), ("sim-bad", "FAIL", "DETECTED")])
 def test_shouldDetectKnownRoundingDefectWhenOracleIsIndependentOfTheAgent(tmp_path, monkeypatch, model, verdict, outcome):
-    monkeypatch.setenv("MODEL_API_KEY", "x")
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
     monkeypatch.setattr(harness, "OUT", tmp_path)
     r = harness.run_one(harness.load("E3"), model, 0)
     assert (r["verdict"], r["outcome"]) == (verdict, outcome)
 
 
 def test_shouldReportKnownFalsePassWhenDefectIsOutsideMandatoryChecks(tmp_path, monkeypatch):
-    monkeypatch.setenv("MODEL_API_KEY", "x")
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
     monkeypatch.setattr(harness, "OUT", tmp_path)
     r = harness.run_one(harness.load("U1"), "sim", 0)
     # documents current behaviour: the verifier accepts what its mandatory checks cannot see
@@ -40,7 +40,7 @@ def test_shouldReportKnownFalsePassWhenDefectIsOutsideMandatoryChecks(tmp_path, 
 
 
 def test_shouldReportCorrectInconclusiveWhenMandatoryCheckCannotRun(tmp_path, monkeypatch):
-    monkeypatch.setenv("MODEL_API_KEY", "x")
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
     monkeypatch.setattr(harness, "OUT", tmp_path)
     r = harness.run_one(harness.load("U2"), "sim", 0)
     assert (r["verdict"], r["oracle_verdict"], r["outcome"]) == ("INCONCLUSIVE", "PASS", "CORRECT_INCONCLUSIVE")

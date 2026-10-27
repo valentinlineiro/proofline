@@ -102,10 +102,9 @@ def run_one(t: EvalTask, model: str, n: int) -> dict:
             stack.enter_context(patch.object(verifier, "ACCEPTANCE_DIR", acceptance))
             if fault_sel:
                 stack.enter_context(_faulty_runner(fault_sel))
-            if model == "sim":
-                stack.enter_context(_fake_model(t.simulated_edit))
-            elif model == "sim-bad":
-                stack.enter_context(_fake_model(t.simulated_defective_edit))
+            if model in ("sim", "sim-bad"):  # no real API involved: a dummy key must not be required
+                stack.enter_context(patch.dict(os.environ, {"MODEL_API_KEY": "simulated"}))
+                stack.enter_context(_fake_model(t.simulated_edit if model == "sim" else t.simulated_defective_edit))
             result = run_task(t.task, BASE, ws, OUT / f"{name}.jsonl", name)
         # oracle: independent, full suite on the final workspace, never seen by the agent
         with patch.object(verifier, "CHECKS", full_checks), patch.object(verifier, "ACCEPTANCE_DIR", acceptance):
