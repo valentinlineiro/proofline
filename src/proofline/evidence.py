@@ -15,6 +15,15 @@ class EvidenceLog:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("")
 
+    @classmethod
+    def resume(cls, path: Path) -> "EvidenceLog":
+        """Continue an existing chain (used to record a crash without breaking the chain)."""
+        log = cls.__new__(cls)
+        log.path = path
+        lines = path.read_text().splitlines()
+        log.prev = json.loads(lines[-1])["sha256"] if lines else "0" * 64
+        return log
+
     def append(self, kind: str, **fields) -> None:
         record = {"kind": kind, "prev": self.prev, **fields}
         record["sha256"] = sha256(json.dumps(record, sort_keys=True))
@@ -27,8 +36,8 @@ def verify_chain(path: Path) -> bool:
     prev = "0" * 64
     for line in path.read_text().splitlines():
         record = json.loads(line)
-        claimed = record.pop("sha256")
-        if record["prev"] != prev or sha256(json.dumps(record, sort_keys=True)) != claimed:
+        claimed = record.pop("sha256", None)
+        if claimed is None or record["prev"] != prev or sha256(json.dumps(record, sort_keys=True)) != claimed:
             return False
         prev = claimed
     return True

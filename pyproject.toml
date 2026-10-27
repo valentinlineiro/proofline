@@ -2,10 +2,10 @@
 name = "proofline"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["openai", "python-dotenv"]
+dependencies = ["openai", "python-dotenv", "fastapi", "uvicorn"]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "httpx"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Proofline</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#14171f;--mute:#5b6372;--line:#dfe3ea;--pass:#0d7a3f;--pass-bg:#e4f5ea;--fail:#b3261e;--fail-bg:#fbe9e7;--warn:#8a5a00;--warn-bg:#fff2d6;--info:#1d4ed8;--info-bg:#e6edff;--code:#f0f2f6}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1218;--card:#171b24;--ink:#e8ebf2;--mute:#9aa3b5;--line:#2a3040;--pass:#4cc38a;--pass-bg:#10281c;--fail:#ff8a80;--fail-bg:#33171a;--warn:#f2c14e;--warn-bg:#33290f;--info:#8fb0ff;--info-bg:#16213d;--code:#10141c}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+main{max-width:980px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:22px;margin:0}h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin:0 0 10px}
+.tag{color:var(--mute);margin:2px 0 18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+textarea,select,button{font:inherit;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+textarea{width:100%;min-height:64px;resize:vertical}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
+button.go{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:600;cursor:pointer}button:disabled{opacity:.5;cursor:default}
+.verdict{border-radius:10px;padding:18px;margin-bottom:14px;border:1px solid}
+.verdict .big{font-size:34px;font-weight:800;letter-spacing:.02em}
+.PASS{background:var(--pass-bg);color:var(--pass);border-color:var(--pass)}.FAIL{background:var(--fail-bg);color:var(--fail);border-color:var(--fail)}
+.INCONCLUSIVE{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}.NEEDS_CLARIFICATION,.RUNNING{background:var(--info-bg);color:var(--info);border-color:var(--info)}
+.badge{display:inline-block;border-radius:999px;padding:1px 9px;font-size:12px;font-weight:700;border:1px solid}
+.VERIFIED{background:var(--pass-bg);color:var(--pass);border-color:var(--pass)}.FAILED{background:var(--fail-bg);color:var(--fail);border-color:var(--fail)}
+.NOT_CHECKED,.NOT_VERIFIED{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:700px){.cols{grid-template-columns:1fr}}
+.mute{color:var(--mute)}.mono{font-family:ui-monospace,monospace;font-size:12.5px}
+ul{margin:6px 0 0;padding-left:18px}li{margin:3px 0}
+.step{border-left:3px solid var(--line);padding:2px 0 2px 14px;margin:0 0 14px}
+.step.model{border-color:var(--info)}.step.verify{border-color:var(--mute)}.step.warn{border-color:var(--warn)}
+.claim{font-size:12px;color:var(--info);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+table{width:100%;border-collapse:collapse;margin-top:6px}td,th{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);font-size:14px}
+pre{background:var(--code);border-radius:8px;padding:10px;overflow:auto;max-height:260px;margin:6px 0;font-size:12px}
+details summary{cursor:pointer;color:var(--mute)}
+.add{color:var(--pass)}.del{color:var(--fail)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Proofline</h1>
+  <p class="tag">An agent saying “done” is a claim. The checks below are the evidence.</p>
+
+  <section class="card">
+    <h2>Task</h2>
+    <textarea id="task"></textarea>
+    <div class="row">
+      <select id="mode"><option value="">Autonomous run</option></select>
+      <button class="go" id="go">Run</button>
+      <select id="history"><option value="">Previous runs…</option></select>
+      <span class="mute" id="note"></span>
+    </div>
+  </section>
+
+  <div id="verdict"></div>
+  <div id="scope"></div>
+  <section class="card"><h2>What happened</h2><div id="timeline" class="mute">Start a run or open a previous one.</div></section>
+  <p class="mute mono" id="chain"></p>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const h = (tag, attrs = {}, ...kids) => {            // DOM builder: text is never interpreted as HTML
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) k === 'class' ? e.className = v : e.setAttribute(k, v);
+  for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(c));
+  return e;
+};
+const SAYS = {
+  PASS: 'Every mandatory check that was run passed.',
+  FAIL: 'At least one mandatory check failed. The change is rejected.',
+  INCONCLUSIVE: 'A required check could not produce a reliable result. Nothing is claimed about the code.',
+  NEEDS_CLARIFICATION: 'The requirements are incomplete. The agent asked instead of guessing.',
+  RUNNING: 'Running…'
+};
+let timer = null, current = null;
+
+async function api(path, opts) { const r = await fetch(path, opts); if (!r.ok) throw new Error((await r.json()).detail || r.status); return r.json(); }
+
+function colorDiff(text) {
+  return h('pre', {}, text.split('\n').map(l => h('div', { class: l.startsWith('+') && !l.startsWith('+++') ? 'add' : l.startsWith('-') && !l.startsWith('---') ? 'del' : '' }, l || ' ')));
+}
+
+function render(run) {
+  const recs = run.records;
+  const verdicts = recs.filter(r => r.kind === 'verdict');
+  const last = verdicts[verdicts.length - 1];
+  const state = run.running ? 'RUNNING' : last ? last.verdict : (recs.some(r => r.kind === 'model_error' || r.kind === 'run_error') ? 'INCONCLUSIVE' : 'RUNNING');
+  const scope = last && last.scope || [];
+  const verified = scope.filter(s => s.status === 'VERIFIED');
+
+  // verdict banner: the verdict comes from the verifier's record, never from the model's text
+  const v = h('div', { class: 'verdict ' + state }, h('div', { class: 'big' }, state.replace('_', ' ')), h('div', {}, SAYS[state]));
+  if (state === 'PASS' && scope.length) {
+    v.append(h('div', { style: 'margin-top:8px;font-weight:600' },
+      verified.length === scope.length ? `All ${scope.length} declared requirements are covered by passing checks.`
+        : `Only ${verified.length} of ${scope.length} declared requirements are covered by a check that ran. Passing is not the same as fully verified.`));
+  }
+  $('verdict').replaceChildren(v);
+
+  // scope of the evidence
+  const sc = $('scope'); sc.replaceChildren();
+  if (scope.length) {
+    const li = (s) => h('li', {}, h('span', { class: 'badge ' + s.status }, s.status.replace('_', ' ')), ' ', s.text, h('span', { class: 'mute mono' }, ' ← ' + s.checks.join(', ')));
+    sc.append(h('section', { class: 'card' }, h('h2', {}, 'Scope of the evidence'), h('div', { class: 'cols' },
+      h('div', {}, h('b', {}, 'Checked'), h('ul', {}, verified.map(li)), verified.length ? null : h('div', { class: 'mute' }, 'Nothing is verified yet.')),
+      h('div', {}, h('b', {}, 'Not demonstrated'), h('ul', {}, scope.filter(s => s.status !== 'VERIFIED').map(li),
+        h('li', {}, 'Any property of the code that no check exercises.'))))));
+  }
+
+  // timeline, in the order things actually happened
+  const tl = $('timeline'); tl.replaceChildren(); tl.className = '';
+  let n = 0;
+  for (const r of recs) {
+    if (r.kind === 'task') tl.append(h('div', { class: 'step' }, h('b', {}, 'Task'), ': ', r.task, r.seeded ? h('div', {}, h('span', { class: 'badge NOT_CHECKED' }, 'SEEDED DEFECT'), ' the workspace starts from a prepared defect; this is a staged scenario, not a spontaneous model error.') : null));
+    else if (r.kind === 'model_edits') tl.append(h('div', { class: 'step model' }, h('div', { class: 'claim' }, `Model proposal (attempt ${r.attempt + 1}) — a claim, not evidence`), h('div', {}, r.proposal.summary || '(no summary)'), h('div', { class: 'mute' }, `${r.proposal.edits.length} edit(s)`)));
+    else if (r.kind === 'clarification_request') tl.append(h('div', { class: 'step model' }, h('div', { class: 'claim' }, 'Model asks for clarification'), h('div', {}, r.question)));
+    else if (r.kind === 'edit_rejected') tl.append(h('div', { class: 'step warn' }, h('b', {}, 'Edit rejected by the backend'), ': ', r.reason));
+    else if (r.kind === 'model_error' || r.kind === 'run_error') tl.append(h('div', { class: 'step warn' }, h('b', {}, 'Run problem'), ': ', r.error));
+    else if (r.kind === 'run_start') {
+      n++; const rows = [];
+      tl.append(h('div', { class: 'step verify', id: 'ver' + n }, h('b', {}, `Independent verification #${n}`),
+        h('div', { class: 'mute mono' }, `base ${r.base_revision.slice(0, 12)} · diff ${r.diff_sha256.slice(0, 12)}`),
+        h('details', {}, h('summary', {}, 'Diff against the base'), r.diff ? colorDiff(r.diff) : h('div', { class: 'mute' }, 'No changes.')),
+        h('table', { id: 'tbl' + n }, h('tr', {}, h('th', {}, 'Check'), h('th', {}, 'Result'), h('th', {}, 'Exit'), h('th', {}, 'Time')))));
+    } else if (r.kind === 'check') {
+      const t = $('tbl' + n) || tl.lastChild; if (!t) continue;
+      t.append(h('tr', {}, h('td', {}, r.name), h('td', {}, h('span', { class: 'badge ' + (r.status === 'PASS' ? 'VERIFIED' : r.status === 'FAIL' ? 'FAILED' : 'NOT_VERIFIED') }, r.status)), h('td', {}, String(r.exit_code)), h('td', {}, r.duration_s != null ? r.duration_s + ' s' : '')));
+      if (r.status !== 'PASS' && r.stdout_tail) t.parentNode.append(h('details', {}, h('summary', {}, `Real output of ${r.name}`), h('pre', {}, r.stdout_tail)));
+    }
+  }
+  if (run.running) tl.append(h('div', { class: 'mute' }, 'Working…'));
+  const tail = recs.length ? recs[recs.length - 1].sha256 : null;
+  $('chain').textContent = tail ? `Evidence chain ${run.chain_valid ? 'valid' : 'INVALID'} · head ${tail.slice(0, 16)}… · ${run.run_id}` : '';
+}
+
+async function poll(id) {
+  clearInterval(timer); current = id;
+  const tick = async () => { const run = await api('/api/runs/' + id); render(run); if (!run.running) { clearInterval(timer); $('go').disabled = false; loadHistory(); } };
+  await tick(); timer = setInterval(tick, 1000);
+}
+
+async function loadHistory() {
+  const ids = await api('/api/runs'); const sel = $('history');
+  sel.replaceChildren(h('option', { value: '' }, 'Previous runs…'), ...ids.map(i => h('option', { value: i }, i)));
+}
+
+$('go').onclick = async () => {
+  $('go').disabled = true; $('note').textContent = '';
+  try {
+    const r = await api('/api/runs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ task: $('task').value, seed: $('mode').value || null }) });
+    poll(r.run_id);
+  } catch (e) { $('note').textContent = e.message; $('go').disabled = false; }
+};
+$('history').onchange = e => e.target.value && poll(e.target.value);
+
+(async () => {
+  $('task').value = 'Apply a 10% discount when the subtotal is strictly greater than 100. The returned total must be rounded to 2 decimals using HALF_UP (round half away from zero).';
+  for (const s of await api('/api/seeds')) $('mode').append(h('option', { value: s }, `Staged scenario: seeded defect “${s}”`));
+  loadHistory();
+})();
+</script>
+</body>
+</html>

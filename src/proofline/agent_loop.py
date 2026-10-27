@@ -27,6 +27,7 @@ def run_task(task: str, base: Path, workspace: Path, evidence_file: Path, run_id
     """verify_first: controlled-demo mode. The workspace starts with a prepared defect; the verifier judges it
     before the model is asked, and the model repairs from that real evidence (does not consume an attempt)."""
     log = EvidenceLog(evidence_file)
+    log.append("task", task=task, seeded=verify_first)
     feedback = ""
     result: dict = {}
     if verify_first:
@@ -63,23 +64,28 @@ def run_task(task: str, base: Path, workspace: Path, evidence_file: Path, run_id
     return result
 
 
-if __name__ == "__main__":
+def run_new(task: str, seed: str | None, run_id: str, evidence_file: Path) -> dict:
+    """Fresh workspace from the fixture (plus an optional prepared-defect seed), then the full loop."""
     import shutil
     import tempfile
 
     from .verifier import ROOT
-    load_dotenv()
     base = ROOT / "fixtures" / "discount-service"
-    # usage: agent_loop [--seed NAME] [TASK]   (--seed = controlled demo with a prepared defect)
-    args = sys.argv[1:]
-    seed = None
-    if args[:1] == ["--seed"]:
-        seed, args = args[1], args[2:]
-    task = args[0] if args else DEFAULT_TASK
     with tempfile.TemporaryDirectory(prefix="proofline-ws-") as tmp:
         ws = Path(tmp) / "ws"
         shutil.copytree(base, ws)
         if seed:
             shutil.copytree(ROOT / "fixtures" / "seeds" / seed, ws, dirs_exist_ok=True)
-        name = f"run-{seed or 'autonomous'}"
-        print(json.dumps(run_task(task, base, ws, ROOT / "evidence" / f"{name}.jsonl", name, verify_first=bool(seed)), indent=2))
+        return run_task(task, base, ws, evidence_file, run_id, verify_first=bool(seed))
+
+
+if __name__ == "__main__":
+    from .verifier import ROOT
+    load_dotenv()
+    # usage: agent_loop [--seed NAME] [TASK]   (--seed = controlled demo with a prepared defect)
+    args = sys.argv[1:]
+    seed = None
+    if args[:1] == ["--seed"]:
+        seed, args = args[1], args[2:]
+    name = f"run-{seed or 'autonomous'}"
+    print(json.dumps(run_new(args[0] if args else DEFAULT_TASK, seed, name, ROOT / "evidence" / f"{name}.jsonl"), indent=2))
