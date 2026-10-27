@@ -81,3 +81,26 @@ Caveats: same small samples as round 1 (3–5 runs per task). The model asking i
 ask when it should, or never when it should not; it shows no regression on this battery. A2 is still resolved by the
 verifier's failure output, not by the model understanding the intent. The oracle limitations of round 1 still apply.
 A `NEEDS_CLARIFICATION` ends the run without verifying anything, so it carries no claim about code correctness.
+
+## Round 3: native tool calling
+
+The agent now talks to Muse Spark through the API's native tool calling (`apply_edits` or `ask_clarification`, exactly one call per
+reply) instead of asking for JSON in the prompt. Nothing else changed: same battery, same model (Muse Spark 1.3 Contributor, real
+API), same contracts. Evidence in `evidence/eval-round3/` (a sample is published in `evidence-samples/round3/`).
+
+| Group | Round 2 | Round 3 |
+|---|---|---|
+| S1–S3, E1–E3 (18 runs) | 18 PASS, first attempt | 18 PASS, first attempt |
+| U1 (5 runs) | 5 PASS (no defect introduced) | 5 PASS (no defect introduced) |
+| U2 (5 runs) | 5 INCONCLUSIVE, no repair | 5 INCONCLUSIVE, no repair |
+| A2 (3 runs) | 3 × FAIL then PASS | 3 × FAIL then PASS (2 attempts) |
+| A1 (3 runs) | 3 `NEEDS_CLARIFICATION` | 3 `NEEDS_CLARIFICATION` |
+
+Outcomes are identical to round 2, run by run. In the 34 real runs there was no `model_error`: the model always produced exactly one
+well-formed tool call. All evidence chains validate; no API key or oracle/hidden-intent strings in proposals or questions.
+
+API behaviour observed: `tool_choice` accepts only `"auto"` (`"required"` and named choices return HTTP 400), so a text-only reply
+cannot be forced into a tool call. The client fails closed: no tool call, more than one, an unknown tool or invalid arguments end the run as
+`INCONCLUSIVE`, never as a pass.
+
+Caveats: same small samples as before, so this shows no regression, not that tool calling is more reliable than prompt-level JSON.

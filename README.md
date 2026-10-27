@@ -16,7 +16,7 @@ carries an explicit scope (which requirements had a check that ran) so it cannot
 
 ```
 task ──▶ agent_loop ──▶ model_client ──▶ Muse Spark (Meta Model API)
-            │                 └─ reply = structured edits  OR  one clarification question
+            │                 └─ native tool call: apply_edits  OR  ask_clarification (exactly one)
             ▼
         workspace ── allowlist-only, all-or-nothing edits (no shell, no free file access)
             ▼
@@ -29,7 +29,7 @@ task ──▶ agent_loop ──▶ model_client ──▶ Muse Spark (Meta Mode
 | Piece | File | Role |
 |---|---|---|
 | Orchestrator | `src/proofline/agent_loop.py` | Up to 1 attempt + 2 repairs. Repairs only on `FAIL`, fed with the real failing output. |
-| Model client | `src/proofline/model_client.py` | Muse Spark via the OpenAI-compatible Meta Model API. Edits **or** a question, never both. |
+| Model client | `src/proofline/model_client.py` | Muse Spark via the OpenAI-compatible Meta Model API, using **native tool calling** (`tool_choice="auto"` is the only mode the API supports). Edits **or** a question, never both; anything else fails closed. |
 | Workspace | `src/proofline/workspace.py` | Edit allowlist (`DiscountService.java` only), rejects absolute paths, `..`, symlinks, ambiguous matches. |
 | Runner | `src/proofline/runner.py` | One throwaway container per check: no network, 1 GB, 2 CPUs, 300 s. |
 | Verifier | `src/proofline/verifier.py` | Verdict + per-requirement scope. Re-checks the whole diff against the allowlist before running Maven. |
@@ -74,7 +74,7 @@ Without a key, a run ends `INCONCLUSIVE` with `MODEL_API_KEY is not set`; it nev
 ## Run
 
 ```bash
-.venv/bin/pytest -q                                   # 68 tests, ~2.5 min, needs Docker + the warm cache, no API key
+.venv/bin/pytest -q                                   # 102 tests, ~2.5 min, needs Docker + the warm cache, no API key
 .venv/bin/uvicorn proofline.api:app --port 8765       # then open http://localhost:8765
 ```
 
@@ -108,7 +108,8 @@ per task, one fixture, two rounds:
 - U2 (a mandatory check cannot run): 5/5 `INCONCLUSIVE`, no repair attempted.
 - A2 (ambiguous boundary): 3/3 failed for real first and were repaired from the verifier's output. This is evidence-guided repair,
   not understanding of intent.
-- A1 (underspecified): round 1, 3/3 invented a policy (`UNGROUNDED_PASS`); round 2, 3/3 asked for clarification.
+- A1 (underspecified): round 1, 3/3 invented a policy (`UNGROUNDED_PASS`); rounds 2 and 3, 3/3 asked for clarification.
+- Round 3 repeats the battery with native tool calling instead of prompt-level JSON: identical outcomes, no malformed model replies in 34 real runs.
 - **Known false `PASS` (U1)** exists **only with a simulated defect**: when no mandatory check exercises a defect, the verifier
   accepts it and only the full suite catches it. With real Muse Spark, the model never introduced that defect, so no real false
   `PASS` was observed. That is not evidence that none can occur.
@@ -140,7 +141,7 @@ ui/index.html      single-page UI (no build step)
 fixtures/          discount-service (editable project) and seeds/ (prepared defects)
 acceptance-tests/  protected tests + requirements.json, injected by the verifier, outside the editable workspace
 evaluations/       task contracts, per-task oracles, harness, report, RESULTS.md
-tests/             68 tests (Docker is real; only the model API boundary is mocked)
+tests/             102 tests (Docker is real; only the model API boundary is mocked)
 ```
 
 Generated runs go to `evidence/` (git-ignored).
