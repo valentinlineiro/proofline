@@ -1,0 +1,5 @@
+[
+  {"id": "R1", "text": "maxAttempts counts the initial attempt: no retry after the last allowed attempt", "checks": ["acceptance_attempt_limit"]},
+  {"id": "R2", "text": "Only configured transient errors are retried; permanent and unknown errors are not", "checks": ["acceptance_error_classification"]},
+  {"id": "R3", "text": "Backoff grows exponentially, never exceeds the cap and never overflows", "checks": ["acceptance_backoff_growth", "acceptance_backoff_saturation"]}
+]
