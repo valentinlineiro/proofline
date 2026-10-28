@@ -6,6 +6,8 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from .project import all_ids, load
+
 IMAGE = "maven:3.9-eclipse-temurin-21"
 
 
@@ -46,4 +48,6 @@ def run_maven(workdir: Path, args: list[str], timeout_s: int = 300) -> RunResult
 
 
 if __name__ == "__main__":  # python -m proofline.runner : one-time, networked download of the Maven dependencies
-    warm_cache(Path(__file__).resolve().parents[2] / "fixtures" / "discount-service")
+    projects = [load(i) for i in all_ids()]  # validate every manifest before the first networked step
+    for project in projects:
+        warm_cache(project.fixture)

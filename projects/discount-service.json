@@ -1,0 +1,15 @@
+{
+  "id": "discount-service",
+  "fixture": "fixtures/discount-service",
+  "seeds": "fixtures/seeds",
+  "acceptance": "acceptance-tests",
+  "acceptance_dest": "src/test/java/shop",
+  "editable": ["src/main/java/shop/DiscountService.java"],
+  "checks": [
+    {"name": "maven_tests", "selector": "!Acceptance*"},
+    {"name": "acceptance_discount_applies", "selector": "AcceptanceDiscountTest#shouldApplyTenPercentWhenSubtotalExceedsLimit"},
+    {"name": "acceptance_discount_rounding", "selector": "AcceptanceDiscountTest#shouldRoundHalfUpToCentsWhenDiscountLeavesFractionOfCent"},
+    {"name": "acceptance_discount_boundary", "selector": "AcceptanceDiscountTest#shouldNotDiscountWhenSubtotalEqualsLimit"}
+  ],
+  "default_task": "Apply a 10% discount when the subtotal is strictly greater than 100. The returned total must be rounded to 2 decimals using HALF_UP (round half away from zero)."
+}

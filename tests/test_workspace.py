@@ -73,3 +73,4 @@ def test_shouldDetectAddedAndDeletedFiles(ws, tmp_path):
     (ws / "src/test/java/shop/DiscountServiceTest.java").unlink()
     assert changed_files(BASE, ws) == {"src/main/java/shop/Backdoor.java", "src/test/java/shop/DiscountServiceTest.java"}
     assert verify(BASE, ws, tmp_path / "ev.jsonl")["verdict"] == "FAIL"
+

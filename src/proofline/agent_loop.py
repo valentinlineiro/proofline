@@ -8,12 +8,12 @@ from dotenv import load_dotenv
 
 from . import model_client
 from .evidence import EvidenceLog
+from .project import DEFAULT_ID, Project, load
 from .verifier import verify
 from .workspace import ALLOWED, EditRejected, apply_edits
 
 MAX_REPAIRS = 2
-DEFAULT_TASK = ("Apply a 10% discount when the subtotal is strictly greater than 100. "
-                "The returned total must be rounded to 2 decimals using HALF_UP (round half away from zero).")
+DEFAULT_TASK = load().default_task
 
 
 def _inconclusive(log: EvidenceLog, run_id: str, evidence_file: Path, error: str) -> dict:
@@ -23,21 +23,22 @@ def _inconclusive(log: EvidenceLog, run_id: str, evidence_file: Path, error: str
 
 
 def run_task(task: str, base: Path, workspace: Path, evidence_file: Path, run_id: str = "run",
-             verify_first: bool = False) -> dict:
+             verify_first: bool = False, project: Project | None = None) -> dict:
     """verify_first: controlled-demo mode. The workspace starts with a prepared defect; the verifier judges it
     before the model is asked, and the model repairs from that real evidence (does not consume an attempt)."""
+    editable = project.editable if project else ALLOWED
     log = EvidenceLog(evidence_file)
     log.append("task", task=task, seeded=verify_first)
     feedback = ""
     result: dict = {}
     if verify_first:
         log.append("seeded_workspace", note="workspace started from a prepared defect, not a model edit")
-        result = verify(base, workspace, evidence_file, f"{run_id}.seed", log=log)
+        result = verify(base, workspace, evidence_file, f"{run_id}.seed", log=log, project=project)
         if result["verdict"] != "FAIL":
             return result
         feedback = "\n".join(f"[{f['name']}]\n{f['tail']}" for f in result["failures"])
     for attempt in range(1 + MAX_REPAIRS):
-        files = {p: (workspace / p).read_text() for p in ALLOWED}
+        files = {p: (workspace / p).read_text() for p in editable}
         try:
             proposal = model_client.propose_edits(task, files, feedback)
         except model_client.ModelError as e:
@@ -51,32 +52,32 @@ def run_task(task: str, base: Path, workspace: Path, evidence_file: Path, run_id
             break  # asking after a failed verification must not erase the FAIL
         log.append("model_edits", attempt=attempt, proposal=proposal.model_dump())
         try:
-            apply_edits(workspace, proposal.edits)
+            apply_edits(workspace, proposal.edits, editable)
         except EditRejected as e:
             log.append("edit_rejected", attempt=attempt, reason=str(e))
             feedback = f"edit rejected: {e}"
             result = {"run_id": run_id, "verdict": "FAIL", "error": feedback, "evidence_file": str(evidence_file)}
             continue
-        result = verify(base, workspace, evidence_file, f"{run_id}.{attempt}", log=log)
+        result = verify(base, workspace, evidence_file, f"{run_id}.{attempt}", log=log, project=project)
         if result["verdict"] != "FAIL":
             break
         feedback = "\n".join(f"[{f['name']}]\n{f['tail']}" for f in result["failures"])
     return result
 
 
-def run_new(task: str, seed: str | None, run_id: str, evidence_file: Path) -> dict:
+def run_new(task: str, seed: str | None, run_id: str, evidence_file: Path, project_id: str = DEFAULT_ID) -> dict:
     """Fresh workspace from the fixture (plus an optional prepared-defect seed), then the full loop."""
     import shutil
     import tempfile
 
-    from .verifier import ROOT
-    base = ROOT / "fixtures" / "discount-service"
+    project = load(project_id)
+    base = project.fixture
     with tempfile.TemporaryDirectory(prefix="proofline-ws-") as tmp:
         ws = Path(tmp) / "ws"
         shutil.copytree(base, ws)
         if seed:
-            shutil.copytree(ROOT / "fixtures" / "seeds" / seed, ws, dirs_exist_ok=True)
-        return run_task(task, base, ws, evidence_file, run_id, verify_first=bool(seed))
+            shutil.copytree(project.seeds / seed, ws, dirs_exist_ok=True)
+        return run_task(task, base, ws, evidence_file, run_id, verify_first=bool(seed), project=project)
 
 
 if __name__ == "__main__":

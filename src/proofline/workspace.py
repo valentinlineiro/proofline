@@ -3,8 +3,11 @@ from pathlib import Path, PurePosixPath
 
 from pydantic import BaseModel
 
-# Production code the agent may touch. Anything else (tests, acceptance, evidence, pom) is rejected.
-ALLOWED = ("src/main/java/shop/DiscountService.java",)
+from .project import load
+
+# Production code the agent may touch (default project; any other project passes its own list). Anything else
+# (tests, acceptance, evidence, pom) is rejected.
+ALLOWED = load().editable
 
 
 class EditRejected(Exception):

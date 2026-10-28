@@ -9,20 +9,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .evidence import EvidenceLog, sha256
+from .project import Project, load
 from .runner import RunResult, run_maven
 from .workspace import ALLOWED, changed_files
 
 ROOT = Path(__file__).resolve().parents[2]
-ACCEPTANCE_DIR = ROOT / "acceptance-tests"
-ACCEPTANCE_CLASS = "AcceptanceDiscountTest"
-
-# (check name, surefire -Dtest selector). Acceptance checks run against protected tests.
-CHECKS = [
-    ("maven_tests", "!Acceptance*"),
-    ("acceptance_discount_applies", f"{ACCEPTANCE_CLASS}#shouldApplyTenPercentWhenSubtotalExceedsLimit"),
-    ("acceptance_discount_rounding", f"{ACCEPTANCE_CLASS}#shouldRoundHalfUpToCentsWhenDiscountLeavesFractionOfCent"),
-    ("acceptance_discount_boundary",f"{ACCEPTANCE_CLASS}#shouldNotDiscountWhenSubtotalEqualsLimit"),
-]
+_DEFAULT = load()
+# Defaults of the default project. Kept as module attributes: the evaluation harness narrows them per task.
+ACCEPTANCE_DIR = _DEFAULT.acceptance
+CHECKS = list(_DEFAULT.checks)  # (check name, surefire -Dtest selector). Acceptance checks run against protected tests.
 
 
 @dataclass
@@ -61,8 +56,8 @@ def requirement_scope(requirements: list[dict], ran: dict[str, str]) -> list[dic
     return scope
 
 
-def load_requirements() -> list[dict]:
-    f = ACCEPTANCE_DIR / "requirements.json"
+def load_requirements(acceptance_dir: Path | None = None) -> list[dict]:
+    f = (acceptance_dir or ACCEPTANCE_DIR) / "requirements.json"
     return json.loads(f.read_text()) if f.exists() else []
 
 
@@ -76,17 +71,21 @@ def diff(base: Path, work: Path) -> str:
     return out.stdout
 
 
-def verify(base: Path, workspace: Path, evidence_file: Path, run_id: str = "run", log: EvidenceLog | None = None) -> dict:
+def verify(base: Path, workspace: Path, evidence_file: Path, run_id: str = "run", log: EvidenceLog | None = None,
+           project: Project | None = None) -> dict:
+    """`project` None = the default project, with the module-level CHECKS / ACCEPTANCE_DIR (patchable by the harness)."""
+    allowed, checks_to_run, acceptance, dest_rel = ((project.editable, project.checks, project.acceptance, project.acceptance_dest)
+                                                    if project else (ALLOWED, CHECKS, ACCEPTANCE_DIR, _DEFAULT.acceptance_dest))
     log = log or EvidenceLog(evidence_file)
     patch = diff(base, workspace)
     base_rev = tree_hash(base)
     log.append("run_start", run_id=run_id, base_revision=base_rev, diff_sha256=sha256(patch), diff=patch)
 
     checks: list[Check] = []
-    outside = sorted(changed_files(base, workspace) - set(ALLOWED))
+    outside = sorted(changed_files(base, workspace) - set(allowed))
     if outside:  # defense in depth: the edit tool already blocks this, the verifier does not trust it
         log.append("check", name="allowlist", status="FAIL", exit_code=1, files=outside)
-        scope = requirement_scope(load_requirements(), {})
+        scope = requirement_scope(load_requirements(acceptance), {})
         log.append("verdict", verdict="FAIL", scope=scope)
         return {"run_id": run_id, "verdict": "FAIL", "base_revision": base_rev, "scope": scope, "fully_verified": False,
                 "checks": [Check("allowlist", "FAIL", 1).__dict__], "failures": [{"name": "allowlist", "tail": f"modified protected files: {outside}"}],
@@ -96,11 +95,11 @@ def verify(base: Path, workspace: Path, evidence_file: Path, run_id: str = "run"
         sandbox = Path(tmp) / "w"
         shutil.copytree(workspace, sandbox, ignore=shutil.ignore_patterns("target"))
         # inject protected tests last so the workspace cannot shadow or alter them
-        dest = sandbox / "src/test/java/shop"
+        dest = sandbox / dest_rel
         dest.mkdir(parents=True, exist_ok=True)
-        for t in ACCEPTANCE_DIR.glob("*.java"):
+        for t in acceptance.glob("*.java"):
             shutil.copy(t, dest / t.name)
-        for name, selector in CHECKS:
+        for name, selector in checks_to_run:
             r = run_maven(sandbox, ["test", f"-Dtest={selector}", "-Dsurefire.failIfNoSpecifiedTests=true"])
             status = classify(r)
             checks.append(Check(name, status, r.exit_code))
@@ -111,7 +110,7 @@ def verify(base: Path, workspace: Path, evidence_file: Path, run_id: str = "run"
 
     statuses = {c.status for c in checks}
     verdict = "FAIL" if "FAIL" in statuses else "INCONCLUSIVE" if "INCONCLUSIVE" in statuses else "PASS"
-    scope = requirement_scope(load_requirements(), {c.name: c.status for c in checks})
+    scope = requirement_scope(load_requirements(acceptance), {c.name: c.status for c in checks})
     fully = verdict == "PASS" and bool(scope) and all(s["status"] == "VERIFIED" for s in scope)
     log.append("verdict", verdict=verdict, scope=scope, fully_verified=fully)
     return {"run_id": run_id, "verdict": verdict, "base_revision": base_rev, "scope": scope, "fully_verified": fully, "checks": [c.__dict__ for c in checks], "failures": failures,
