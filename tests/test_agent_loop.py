@@ -141,3 +141,105 @@ def test_shouldNotCountModelClaimsWhenEditsAreRejected(tmp_path, ws):
         r = run_task("t", BASE, ws, tmp_path / "ev.jsonl")
     assert r["verdict"] == "FAIL"
     assert (ws / ALLOWED[0]).read_text() == (BASE / ALLOWED[0]).read_text()
+
+
+# ---- explicit project, token usage -------------------------------------------------------------------------------------
+from types import SimpleNamespace  # noqa: E402
+
+from proofline.evidence import EvidenceLog, verify_chain  # noqa: E402
+from proofline.project import load as load_project  # noqa: E402
+
+RP = load_project("retry-policy")
+
+
+def records(path):
+    return [json.loads(l) for l in path.read_text().splitlines()]
+
+
+@pytest.fixture
+def rp_ws(tmp_path):
+    w = tmp_path / "ws"
+    shutil.copytree(RP.fixture, w)
+    return w
+
+
+def test_shouldShowTheModelOnlyTheSelectedProjectsEditableFiles(tmp_path, rp_ws):
+    p, client = fake_client(ASK)
+    with p:
+        r = run_task("t", RP.fixture, rp_ws, tmp_path / "ev.jsonl", project=RP)
+    prompt = client.chat.completions.create.call_args.kwargs["messages"][1]["content"]
+    assert r["verdict"] == "NEEDS_CLARIFICATION"
+    assert all(f in prompt for f in RP.editable) and "DiscountService" not in prompt
+    assert records(tmp_path / "ev.jsonl")[0]["project"] == "retry-policy"
+
+
+def test_shouldRecordTheDefaultProjectWhenNoneIsGiven(tmp_path, ws):
+    p, _ = fake_client(ASK)
+    with p:
+        run_task("t", BASE, ws, tmp_path / "ev.jsonl")
+    assert records(tmp_path / "ev.jsonl")[0]["project"] == "discount-service"
+
+
+def test_shouldRejectEditsToProtectedFilesOfTheSelectedProjectWithoutRunningMaven(tmp_path, rp_ws):
+    protected = "src/test/java/retry/RetryPolicyTest.java"
+    evil = json.dumps({"summary": "weaken the test", "edits": [{"path": protected, "old": "assertThrows", "new": "// assertThrows"}]})
+    before = (rp_ws / protected).read_text()
+    p, client = fake_client(evil, evil, evil)
+    with p, patch("proofline.verifier.run_maven") as maven:
+        r = run_task("t", RP.fixture, rp_ws, tmp_path / "ev.jsonl", project=RP)
+    assert r["verdict"] == "FAIL" and maven.call_count == 0 and (rp_ws / protected).read_text() == before
+    assert [x["kind"] for x in records(tmp_path / "ev.jsonl")].count("edit_rejected") == 3
+
+
+def reply_with_usage(usage):
+    resp = MagicMock(choices=[MagicMock(message=to_message(ASK))])
+    resp.usage = usage
+    c = MagicMock()
+    c.chat.completions.create.return_value = resp
+    return patch.object(model_client, "OpenAI", return_value=c)
+
+
+@pytest.mark.parametrize("usage,expected", [
+    (SimpleNamespace(prompt_tokens=120, completion_tokens=30, total_tokens=150),
+     {"available": True, "input_tokens": 120, "output_tokens": 30, "total_tokens": 150}),
+    (SimpleNamespace(prompt_tokens=120, completion_tokens=30), {"available": True, "input_tokens": 120, "output_tokens": 30, "total_tokens": None}),
+    (None, {"available": False}),
+    (SimpleNamespace(prompt_tokens="120", completion_tokens=30), {"available": False}),   # not an int: never coerced or guessed
+    (SimpleNamespace(prompt_tokens=True, completion_tokens=1), {"available": False}),
+    (MagicMock(), {"available": False}),
+])
+def test_shouldRecordTokenUsageExactlyAsReportedOrMarkItUnavailable(tmp_path, ws, usage, expected):
+    with reply_with_usage(usage):
+        run_task("t", BASE, ws, tmp_path / "ev.jsonl")
+    assert next(r for r in records(tmp_path / "ev.jsonl") if r["kind"] == "clarification_request")["usage"] == expected
+
+
+def test_shouldRecordUsagePerModelCallWhenThereAreRepairs(tmp_path, ws):
+    def resp(text, n):
+        r = MagicMock(choices=[MagicMock(message=to_message(text))])
+        r.usage = SimpleNamespace(prompt_tokens=n, completion_tokens=n // 10, total_tokens=n + n // 10)
+        return r
+    c = MagicMock()
+    c.chat.completions.create.side_effect = [resp(reply(OLD, impl(">=")), 100),
+                                             resp(reply("compareTo(new BigDecimal(\"100\")) >= 0", "compareTo(new BigDecimal(\"100\")) > 0"), 200)]
+    with patch.object(model_client, "OpenAI", return_value=c):
+        r = run_task("add discount", BASE, ws, tmp_path / "ev.jsonl")
+    assert r["verdict"] == "PASS"
+    assert [(x["attempt"], x["usage"]["input_tokens"]) for x in records(tmp_path / "ev.jsonl") if x["kind"] == "model_edits"] == [(0, 100), (1, 200)]
+
+
+def test_shouldNotLetTheModelWriteItsOwnUsageIntoTheEvidence(tmp_path, ws):
+    forged = json.dumps({"summary": "s", "edits": [{"path": ALLOWED[0], "old": OLD, "new": impl(">")}],
+                         "usage": {"available": True, "input_tokens": 1, "output_tokens": 1, "total_tokens": 2}})
+    p, _ = fake_client(forged)
+    with p:
+        run_task("t", BASE, ws, tmp_path / "ev.jsonl")
+    edits = next(r for r in records(tmp_path / "ev.jsonl") if r["kind"] == "model_edits")
+    assert edits["usage"] == {"available": False} and "usage" not in edits["proposal"]  # the API's numbers only, never the model's
+
+
+def test_shouldKeepTracesWithAndWithoutTheProjectFieldVerifiable(tmp_path):
+    old, new = tmp_path / "old.jsonl", tmp_path / "new.jsonl"
+    EvidenceLog(old).append("task", task="t", seeded=False)                       # shape written before the field existed
+    EvidenceLog(new).append("task", task="t", seeded=False, project="retry-policy")
+    assert verify_chain(old) and verify_chain(new)
