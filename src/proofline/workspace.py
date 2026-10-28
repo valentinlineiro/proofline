@@ -1,10 +1,14 @@
 """Controlled edits: structured search/replace on an explicit allowlist, validated before anything is written."""
+import os
 from pathlib import Path, PurePosixPath
 
 from pydantic import BaseModel
 
-# Production code the agent may touch. Anything else (tests, acceptance, evidence, pom) is rejected.
-ALLOWED = ("src/main/java/shop/DiscountService.java",)
+from .project import load
+
+# Production code the agent may touch (default project; any other project passes its own list). Anything else
+# (tests, acceptance, evidence, pom) is rejected.
+ALLOWED = load().editable
 
 
 class EditRejected(Exception):
@@ -44,7 +48,9 @@ def apply_edits(root: Path, edits: list[Edit], allowed: tuple[str, ...] = ALLOWE
 
 def changed_files(base: Path, work: Path) -> set[str]:
     def tree(d: Path) -> dict[str, bytes]:
-        return {str(p.relative_to(d)): p.read_bytes() for p in d.rglob("*")
-                if p.is_file() and "target" not in p.relative_to(d).parts}
+        # every entry is tagged with its kind, so a symlink and a regular file can never look alike (a file whose text is
+        # "symlink:foo" vs a link to foo), and links to directories are listed too: copytree would follow them
+        return {str(p.relative_to(d)): (b"L:" + os.readlink(p).encode() if p.is_symlink() else b"F:" + p.read_bytes())
+                for p in d.rglob("*") if (p.is_symlink() or p.is_file()) and "target" not in p.relative_to(d).parts}
     a, b = tree(base), tree(work)
     return {k for k in a.keys() | b.keys() if a.get(k) != b.get(k)}
