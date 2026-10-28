@@ -32,10 +32,12 @@ task ──▶ agent_loop ──▶ model_client ──▶ Muse Spark (Meta Mode
 |---|---|---|
 | Orchestrator | `src/proofline/agent_loop.py` | Up to 1 attempt + 2 repairs. Repairs only on `FAIL`, fed with the real failing output. |
 | Model client | `src/proofline/model_client.py` | Muse Spark via the OpenAI-compatible Meta Model API, using **native tool calling** (`tool_choice="auto"` is the only mode the API supports). Edits **or** a question, never both; anything else fails closed. |
-| Workspace | `src/proofline/workspace.py` | Edit allowlist (`DiscountService.java` only), rejects absolute paths, `..`, symlinks, ambiguous matches. |
+| Project manifest | `projects/<id>.json`, `src/proofline/project.py` | Per project: editable files, checks, protected tests, default task. Validated strictly; an invalid manifest is an error, never a permissive run. |
+| Workspace | `src/proofline/workspace.py` | Edit allowlist (from the manifest), rejects absolute paths, `..`, symlinks, ambiguous matches; a symlink in the workspace counts as a change. |
 | Runner | `src/proofline/runner.py` | One throwaway container per check: no network, 1 GB, 2 CPUs, 300 s. |
 | Verifier | `src/proofline/verifier.py` | Verdict + per-requirement scope. Re-checks the whole diff against the allowlist before running Maven. |
-| Evidence | `src/proofline/evidence.py` | Hash-chained JSONL; `verify_chain` detects edits inside the chain. |
+| Evidence | `src/proofline/evidence.py` | Hash-chained JSONL; `verify_chain` detects edits inside the chain. Records the project and the token usage the API reported per model call. |
+| Call cap | `src/proofline/budget.py` | Optional persistent ledger that caps real model calls across runs (`MODEL_CALL_BUDGET_FILE`); counted before each call, never refunded, fail-closed. |
 | API + UI | `src/proofline/api.py`, `ui/index.html` | Starts runs and renders **what the evidence file says**; the UI never computes a verdict. |
 | Evaluation | `evaluations/` | Task contracts, independent oracles, harness, report. |
 
@@ -76,7 +78,7 @@ Without a key, a run ends `INCONCLUSIVE` with `MODEL_API_KEY is not set`; it nev
 ## Run
 
 ```bash
-.venv/bin/pytest -q                                   # 102 tests, ~2.5 min, needs Docker + the warm cache, no API key
+.venv/bin/pytest -q                                   # 209 tests, ~7 min, needs Docker + the warm cache, no API key
 .venv/bin/uvicorn proofline.api:app --port 8765       # then open http://localhost:8765
 ```
 
@@ -104,7 +106,7 @@ The API is local-only and unauthenticated, and runs one job at a time. Do not ex
 ## Evaluation
 
 See [`evaluations/RESULTS.md`](evaluations/RESULTS.md) for the full tables and caveats. Summary, real Muse Spark runs, 3–5 runs
-per task, one fixture, three rounds of the same 10-task battery (so 102 runs are repeats, not 102 distinct cases), all on
+per task, on the discount-service fixture, three rounds of the same 10-task battery (so 102 runs are repeats, not 102 distinct cases), all on
 `muse-spark-1.3-contributor` (see the note on the tier above):
 
 - Simple and edge-case tasks (S1–S3, E1–E3): 18/18 `PASS` on the first attempt, in each round (18 runs per round).
@@ -118,24 +120,46 @@ per task, one fixture, three rounds of the same 10-task battery (so 102 runs are
   `PASS` was observed. That is not evidence that none can occur.
 
 Not to be confused with the test suite: the evaluation is the same 10-task battery run three times with the real model (34 runs per round, 102 runs in
-total). The automated suite is a separate set of 102 tests that needs no API key.
+total). The automated suite is a separate set of 209 tests that needs no API key.
 
 Simulated-model runs (`sim`, `sim-bad`) validate the harness and the oracle, not Muse Spark. Reproduce the real battery with
 `.venv/bin/python -m evaluations.harness real 3 S1 S2 S3 E1 E2 E3 A1 A2` and `... real 5 U1 U2`.
+
+### Second fixture: `retry-policy`
+
+A deterministic retry decision (attempt limit counted from the first attempt, transient-error classification, capped exponential backoff)
+with its own manifest and protected tests. Results are reported **separately** from the discount-service numbers above:
+
+- 3 real runs of `RP1` (implement from an empty skeleton, full contract in the task): 3/3 `PASS`, all three requirements verified,
+  one model call each, no repair; 4,275 input and 10,915 output tokens in total as reported by the API. 3 of a 9-call cap were used.
+- **Read with care.** The oracle runs the same checks as the agent's verification here, so it confirms reproducibility, not that the
+  tests are sufficient. The task was fully specified, no failure was observed, and it is one model, one task and three runs: a first
+  signal, not a success rate. The seeded-defect repair (`RP2`) was not run with the real model.
+- Evidence: [`evidence-samples/rp1/`](evidence-samples/rp1/); details and caveats in [`evaluations/RESULTS.md`](evaluations/RESULTS.md).
+
+Select a project and plan a run without spending anything (no workspace, no model call):
+
+```bash
+.venv/bin/python -m evaluations.harness real 3 --project retry-policy RP1 --dry-run
+# a real run should be capped: create the ledger once, then point the run at it
+.venv/bin/python -m proofline.budget init evidence/budget.json 9
+MODEL_CALL_BUDGET_FILE=$PWD/evidence/budget.json .venv/bin/python -m evaluations.harness real 3 --project retry-policy RP1
+```
 
 ## Limitations
 
 - **Verification is only as good as its checks.** `PASS` means the declared checks passed. Requirements are mapped to checks
   by hand (`acceptance-tests/requirements.json`); Proofline does not measure coverage or prove the mapping is complete.
-- **Oracle independence.** For most evaluation tasks the oracle runs the same tests as the mandatory check on a clean second
-  run, so it shows reproducibility, not that the tests are sufficient.
+- **Oracle independence.** For most evaluation tasks (and for `RP1`) the oracle runs the same tests as the mandatory checks on a
+  clean second run, so it shows reproducibility, not that the tests are sufficient.
 - **Evidence chain.** It detects tampering *inside* the chain. With no external anchor, someone who can rewrite the file can
   rewrite the whole chain. It is not proof of immutability.
 - **Sandbox is not hardened.** Model-written code runs inside a Docker container with no network, memory/CPU/time limits and a
   read-only dependency cache, but as the container's root with Docker's default seccomp profile and no extra capability
   dropping. Treat it as containment for a demo, not as protection against hostile code.
-- **Scope.** One fixture (a Java discount service), one editable file, one model, small samples. No multi-language or
-  multi-repository support, no memory, no multi-agent flow.
+- **Scope.** Two small Java fixtures (a discount service and a retry policy), at most two editable files each, one model, small
+  samples; the API and UI still run only the default project. No multi-language or multi-repository support, no memory, no
+  multi-agent flow.
 - **Clarification is one-shot.** `NEEDS_CLARIFICATION` ends the run; there is no reply flow yet.
 - **Spring Boot is not used.** The fixture is plain Maven + JUnit; Spring would add build time without changing what is demonstrated.
 
@@ -144,10 +168,11 @@ Simulated-model runs (`sim`, `sim-bad`) validate the harness and the oracle, not
 ```
 src/proofline/     orchestrator, model client, workspace, runner, verifier, evidence, API
 ui/index.html      single-page UI (no build step)
-fixtures/          discount-service (editable project) and seeds/ (prepared defects)
-acceptance-tests/  protected tests + requirements.json, injected by the verifier, outside the editable workspace
+projects/          one manifest per project (editable files, checks, protected tests)
+fixtures/          discount-service and retry-policy (editable projects) and their seeds (prepared defects)
+acceptance-tests*/ protected tests + requirements.json per project, injected by the verifier, outside the editable workspace
 evaluations/       task contracts, per-task oracles, harness, report, RESULTS.md
-tests/             102 tests (Docker is real; only the model API boundary is mocked)
+tests/             209 tests (Docker is real; only the model API boundary is mocked)
 ```
 
 Generated runs go to `evidence/` (git-ignored).
