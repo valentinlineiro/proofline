@@ -16,8 +16,11 @@ MAX_REPAIRS = 2
 DEFAULT_TASK = load().default_task
 
 
-def _inconclusive(log: EvidenceLog, run_id: str, evidence_file: Path, error: str) -> dict:
-    log.append("model_error", error=error)
+NO_USAGE = {"available": False}  # token counts are recorded only as the API reported them
+
+
+def _inconclusive(log: EvidenceLog, run_id: str, evidence_file: Path, error: str, usage: dict | None = None) -> dict:
+    log.append("model_error", error=error, usage=usage or NO_USAGE)
     log.append("verdict", verdict="INCONCLUSIVE", reason=error)
     return {"run_id": run_id, "verdict": "INCONCLUSIVE", "error": error, "evidence_file": str(evidence_file)}
 
@@ -28,7 +31,7 @@ def run_task(task: str, base: Path, workspace: Path, evidence_file: Path, run_id
     before the model is asked, and the model repairs from that real evidence (does not consume an attempt)."""
     editable = project.editable if project else ALLOWED
     log = EvidenceLog(evidence_file)
-    log.append("task", task=task, seeded=verify_first)
+    log.append("task", task=task, seeded=verify_first, project=project.id if project else DEFAULT_ID)
     feedback = ""
     result: dict = {}
     if verify_first:
@@ -39,18 +42,19 @@ def run_task(task: str, base: Path, workspace: Path, evidence_file: Path, run_id
         feedback = "\n".join(f"[{f['name']}]\n{f['tail']}" for f in result["failures"])
     for attempt in range(1 + MAX_REPAIRS):
         files = {p: (workspace / p).read_text() for p in editable}
+        usage: dict = {}
         try:
-            proposal = model_client.propose_edits(task, files, feedback)
+            proposal = model_client.propose_edits(task, files, feedback, on_usage=usage.update)
         except model_client.ModelError as e:
-            return _inconclusive(log, run_id, evidence_file, str(e))
+            return _inconclusive(log, run_id, evidence_file, str(e), usage)
         if proposal.clarification:
-            log.append("clarification_request", attempt=attempt, question=proposal.clarification)
+            log.append("clarification_request", attempt=attempt, question=proposal.clarification, usage=usage or NO_USAGE)
             if attempt == 0 and not verify_first:  # nothing was verified yet: requirements are incomplete
                 log.append("verdict", verdict="NEEDS_CLARIFICATION", question=proposal.clarification)
                 return {"run_id": run_id, "verdict": "NEEDS_CLARIFICATION", "question": proposal.clarification,
                         "evidence_file": str(evidence_file)}
             break  # asking after a failed verification must not erase the FAIL
-        log.append("model_edits", attempt=attempt, proposal=proposal.model_dump())
+        log.append("model_edits", attempt=attempt, proposal=proposal.model_dump(), usage=usage or NO_USAGE)
         try:
             apply_edits(workspace, proposal.edits, editable)
         except EditRejected as e:

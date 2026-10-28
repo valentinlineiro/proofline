@@ -2,6 +2,7 @@
 The model proposes through exactly one tool call: structured edits OR one clarification question. No shell, no verdicts."""
 import json
 import os
+from typing import Callable
 
 from openai import OpenAI
 from pydantic import BaseModel, ValidationError, model_validator
@@ -68,7 +69,18 @@ def _from_tool_calls(calls: list) -> EditSet:
     raise ModelError("unknown tool")
 
 
-def propose_edits(task: str, files: dict[str, str], feedback: str = "", timeout_s: float = 60) -> EditSet:
+def _usage(resp) -> dict:
+    """Token counts exactly as the API reported them: never estimated, never a cost. Anything else is explicitly unavailable."""
+    u = getattr(resp, "usage", None)
+    got = {k: getattr(u, k, None) for k in ("prompt_tokens", "completion_tokens", "total_tokens")}
+    if all(type(v) is int for v in (got["prompt_tokens"], got["completion_tokens"])):
+        return {"available": True, "input_tokens": got["prompt_tokens"], "output_tokens": got["completion_tokens"],
+                "total_tokens": got["total_tokens"] if type(got["total_tokens"]) is int else None}
+    return {"available": False}
+
+
+def propose_edits(task: str, files: dict[str, str], feedback: str = "", timeout_s: float = 60,
+                  on_usage: Callable[[dict], None] | None = None) -> EditSet:
     key = os.environ.get("MODEL_API_KEY")
     if not key:
         raise ModelError("MODEL_API_KEY is not set")
@@ -84,6 +96,8 @@ def propose_edits(task: str, files: dict[str, str], feedback: str = "", timeout_
         calls = list(resp.choices[0].message.tool_calls or [])
     except Exception as e:  # SDK errors can echo request details; keep only the type
         raise ModelError(f"model call failed: {type(e).__name__}") from None
+    if on_usage:
+        on_usage(_usage(resp))  # reported per call, before the reply is judged valid or not
     if not calls:
         raise ModelError("model did not call a tool")
     return _from_tool_calls(calls)
