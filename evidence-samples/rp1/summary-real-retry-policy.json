@@ -1,0 +1,74 @@
+[
+  {
+    "task": "RP1",
+    "group": "simple",
+    "model": "real",
+    "run": 0,
+    "verdict": "PASS",
+    "oracle_verdict": "PASS",
+    "outcome": "TRUE_PASS",
+    "attempts": 1,
+    "expected_verdict": "PASS",
+    "clarification_required": false,
+    "missing_evidence": [],
+    "model_summary": "Implement Backoff.delayAfter with overflow-safe capped exponential doubling and RetryPolicy.decide with validation, transient-type check, and maxAttempts logic.",
+    "question": null,
+    "project": "retry-policy",
+    "duration_s": 48.5,
+    "usage": {
+      "model_calls": 1,
+      "calls_with_usage": 1,
+      "input_tokens": 1425,
+      "output_tokens": 3391
+    },
+    "budget_exhausted": false
+  },
+  {
+    "task": "RP1",
+    "group": "simple",
+    "model": "real",
+    "run": 1,
+    "verdict": "PASS",
+    "oracle_verdict": "PASS",
+    "outcome": "TRUE_PASS",
+    "attempts": 1,
+    "expected_verdict": "PASS",
+    "clarification_required": false,
+    "missing_evidence": [],
+    "model_summary": "Implemented Backoff.delayAfter with overflow-safe capped exponential doubling and RetryPolicy.decide with validation, transient-type check, and maxAttempts logic.",
+    "question": null,
+    "project": "retry-policy",
+    "duration_s": 34.5,
+    "usage": {
+      "model_calls": 1,
+      "calls_with_usage": 1,
+      "input_tokens": 1425,
+      "output_tokens": 2285
+    },
+    "budget_exhausted": false
+  },
+  {
+    "task": "RP1",
+    "group": "simple",
+    "model": "real",
+    "run": 2,
+    "verdict": "PASS",
+    "oracle_verdict": "PASS",
+    "outcome": "TRUE_PASS",
+    "attempts": 1,
+    "expected_verdict": "PASS",
+    "clarification_required": false,
+    "missing_evidence": [],
+    "model_summary": "Implemented RetryPolicy.decide with validation and transient-type check, and Backoff.delayAfter with overflow-safe capped exponential doubling.",
+    "question": null,
+    "project": "retry-policy",
+    "duration_s": 64.9,
+    "usage": {
+      "model_calls": 1,
+      "calls_with_usage": 1,
+      "input_tokens": 1425,
+      "output_tokens": 5239
+    },
+    "budget_exhausted": false
+  }
+]

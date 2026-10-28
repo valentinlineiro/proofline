@@ -1,6 +1,7 @@
 # Evaluation results
 
-Round 1 (baseline, commit `ed7d1ea`) is below. Round 2 (after `NEEDS_CLARIFICATION` and requirement scope) is at the end.
+Round 1 (baseline, commit `ed7d1ea`) is below. Round 2 (after `NEEDS_CLARIFICATION` and requirement scope) and round 3 are after it.
+The **second fixture (`retry-policy`, phase 3C)** is the last section: a different project, kept apart from the discount-service rounds.
 
 ## Round 1
 
@@ -104,3 +105,59 @@ cannot be forced into a tool call. The client fails closed: no tool call, more t
 `INCONCLUSIVE`, never as a pass.
 
 Caveats: same small samples as before, so this shows no regression, not that tool calling is more reliable than prompt-level JSON.
+
+## Second fixture: retry-policy (phase 3C)
+
+Kept apart from the discount-service rounds: a different project (its own manifest, protected tests and requirements), one task, three
+runs. Its numbers are never added to the 102-run totals above.
+
+**What ran.** 28 October 2026, on `main` at `16b1cdc`, real Muse Spark (`muse-spark-1.3-contributor`, native tool calling), task `RP1`:
+implement `RetryPolicy.decide` and `Backoff.delayAfter` from an **empty skeleton**. The task text carries the full contract
+(attempts are counted including the first one; transient errors by type; capped exponential backoff that must not overflow). Command:
+
+```
+MODEL_CALL_BUDGET_FILE=$PWD/evidence/eval-rp1/budget.json PROOFLINE_EVAL_OUT=$PWD/evidence/eval-rp1 \
+  .venv/bin/python -m evaluations.harness real 3 --project retry-policy RP1
+```
+
+Three independent runs, each from a clean workspace. Cap: 9 model calls (a persistent ledger, counted before each call); **3 were used**,
+6 remain unused. Only synthetic code was sent. `RP2` (repair of the seeded off-by-one) was **not** run with the real model.
+
+| Run | Verdict | Oracle | Attempts / calls | Requirements | Agent loop time | Tokens in / out / total |
+|---|---|---|---|---|---|---|
+| 0 | `PASS`, fully verified | `PASS` | 1 / 1 | R1, R2, R3 verified | 48.5 s | 1,425 / 3,391 / 4,816 |
+| 1 | `PASS`, fully verified | `PASS` | 1 / 1 | R1, R2, R3 verified | 34.5 s | 1,425 / 2,285 / 3,710 |
+| 2 | `PASS`, fully verified | `PASS` | 1 / 1 | R1, R2, R3 verified | 64.9 s | 1,425 / 5,239 / 6,664 |
+| **Total** | 3/3 | 3/3 | 3 / 3 | | | **4,275 / 10,915 / 15,190** |
+
+Each run passed all five checks: `maven_tests`, `acceptance_attempt_limit`, `acceptance_error_classification`,
+`acceptance_backoff_growth`, `acceptance_backoff_saturation`. No repair was needed, no edit was rejected, and every diff touched only
+`RetryPolicy.java` and `Backoff.java`.
+
+Notes on the columns: tokens are exactly what the API reported for each call (available for all three); no cost is computed. "Agent loop
+time" covers the model call and the verification, not the oracle. The model's own summary of its change (a claim, not evidence) is
+in each trace.
+
+**Evidence** (hash-chained, all six chains verify; see [`evidence-samples/README.md`](../evidence-samples/README.md)):
+[`evidence-samples/rp1/`](../evidence-samples/rp1/) holds `RP1-real-{0,1,2}.jsonl` (agent runs), `RP1-real-{0,1,2}.oracle.jsonl`
+(oracle runs), `summary-real-retry-policy.json` and `budget-ledger.json` (final state of the call ledger: limit 9, used 3).
+
+### What this shows
+
+On a second, differently shaped project, three independent runs of Muse Spark implemented an explicitly specified policy from an empty
+skeleton and every run was verified `PASS` on all three requirements. It also exercised the new parts end to end: project selection from a
+manifest, per-call token records and the call cap.
+
+### What it does not show
+
+- **The oracle is not an independent check here.** In `RP1` all five checks are mandatory, so the oracle runs the *same* checks as the
+  agent's verification. `Oracle: PASS` confirms the result reproduces; it cannot reveal a gap in those tests.
+- **A specified task, not an ambiguous one.** The contract was written out in the task. This does not show that the model resolves
+  ambiguous requirements, notices its own mistakes, or understands intent.
+- **No failure was observed**, so nothing was learned about how the model fails on this fixture. Zero repairs also means the repair loop
+  was not exercised on a real model run here.
+- **Sample size.** One model, one task, three runs with the same prompt, one small two-file fixture. This is a first signal, not a success
+  rate, and does not extend to other projects.
+- **How sensitive the tests are** is supported only by a hand-run check of eight plausible wrong implementations of the correct solution
+  (exact-class match, retrying unknown errors, missing null/range/argument checks, no cap, exponent off by one, no saturation): the
+  protected tests rejected all eight; two are kept in the automated suite. That is a small sanity check, not exhaustive mutation testing.

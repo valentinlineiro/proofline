@@ -9,6 +9,7 @@ checked. A sample, not everything: the full set of runs is not published.
 | `demo/u1-partial-coverage-SIMULATED-model.jsonl` | `PASS` with `fully_verified: false`. **The defect comes from a simulated model, not from Muse Spark.** |
 | `round3/traces/*-real-0.jsonl` | One real Muse Spark trace per evaluation task, **native tool calling** (the current client). `A1` ends `NEEDS_CLARIFICATION`; `U2` ends `INCONCLUSIVE` because a mandatory check was made to fail on purpose. |
 | `round2/traces/*-real-0.jsonl` | Same tasks with the previous client (JSON asked for in the prompt). |
+| `rp1/` | **Second fixture (`retry-policy`), three real Muse Spark runs of `RP1`** (28 Oct 2026): 3 agent traces, 3 oracle traces, `summary-real-retry-policy.json` and `budget-ledger.json` (call cap 9, used 3). Native tool calling, per-call token usage recorded. See the last section of `RESULTS.md`. |
 | `round1/`, `round2/`, `round3/` `summary-*.json` | One row per run (all repetitions): verdict, independent-oracle verdict, outcome class, attempts. |
 
 Each line is a record with the SHA-256 of the previous one. To verify a file:
