@@ -92,14 +92,15 @@ def verify(base: Path, workspace: Path, evidence_file: Path, run_id: str = "run"
                 "diff_sha256": sha256(patch), "evidence_file": str(evidence_file)}
     failures: list[dict] = []
     with tempfile.TemporaryDirectory(prefix="proofline-") as tmp:
-        sandbox = Path(tmp) / "w"
-        shutil.copytree(workspace, sandbox, ignore=shutil.ignore_patterns("target"))
-        # inject protected tests last so the workspace cannot shadow or alter them
-        dest = sandbox / dest_rel
-        dest.mkdir(parents=True, exist_ok=True)
-        for t in acceptance.glob("*.java"):
-            shutil.copy(t, dest / t.name)
-        for name, selector in checks_to_run:
+        for i, (name, selector) in enumerate(checks_to_run):
+            # one pristine sandbox per check: nothing a check leaves behind (files, target/) reaches the next one
+            sandbox = Path(tmp) / f"w{i}"
+            shutil.copytree(workspace, sandbox, ignore=shutil.ignore_patterns("target"))
+            # inject protected tests last so the workspace cannot shadow or alter them
+            dest = sandbox / dest_rel
+            dest.mkdir(parents=True, exist_ok=True)
+            for t in acceptance.glob("*.java"):
+                shutil.copy(t, dest / t.name)
             r = run_maven(sandbox, ["test", f"-Dtest={selector}", "-Dsurefire.failIfNoSpecifiedTests=true"])
             status = classify(r)
             checks.append(Check(name, status, r.exit_code))

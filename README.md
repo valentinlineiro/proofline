@@ -78,7 +78,7 @@ Without a key, a run ends `INCONCLUSIVE` with `MODEL_API_KEY is not set`; it nev
 ## Run
 
 ```bash
-.venv/bin/pytest -q                                   # 209 tests, ~7 min, needs Docker + the warm cache, no API key
+.venv/bin/pytest -q                                   # 211 tests, ~9 min, needs Docker + the warm cache, no API key
 .venv/bin/uvicorn proofline.api:app --port 8765       # then open http://localhost:8765
 ```
 
@@ -120,7 +120,7 @@ per task, on the discount-service fixture, three rounds of the same 10-task batt
   `PASS` was observed. That is not evidence that none can occur.
 
 Not to be confused with the test suite: the evaluation is the same 10-task battery run three times with the real model (34 runs per round, 102 runs in
-total). The automated suite is a separate set of 209 tests that needs no API key.
+total). The automated suite is a separate set of 211 tests that needs no API key.
 
 Simulated-model runs (`sim`, `sim-bad`) validate the harness and the oracle, not Muse Spark. Reproduce the real battery with
 `.venv/bin/python -m evaluations.harness real 3 S1 S2 S3 E1 E2 E3 A1 A2` and `... real 5 U1 U2`.
@@ -154,9 +154,14 @@ MODEL_CALL_BUDGET_FILE=$PWD/evidence/budget.json .venv/bin/python -m evaluations
   clean second run, so it shows reproducibility, not that the tests are sufficient.
 - **Evidence chain.** It detects tampering *inside* the chain. With no external anchor, someone who can rewrite the file can
   rewrite the whole chain. It is not proof of immutability.
-- **Sandbox is not hardened.** Model-written code runs inside a Docker container with no network, memory/CPU/time limits and a
-  read-only dependency cache, but as the container's root with Docker's default seccomp profile and no extra capability
-  dropping. Treat it as containment for a demo, not as protection against hostile code.
+- **Sandbox: partly hardened, not a security boundary.** Every check gets a pristine copy of the workspace plus the protected
+  tests, in its own throwaway container (no network, memory/CPU/time limits, read-only dependency cache, all capabilities
+  dropped except the few Maven needs, `no-new-privileges`, PID limit). Maven runs as root; the forked test JVM, where
+  model-written code executes, runs as `nobody` and so cannot write the sources, the protected tests, the compiled classes
+  or the reports, nor signal Maven. `tests/test_verifier_isolation.py` runs hostile Java that tries exactly that (real
+  Docker) and checks that it fails. What this does not stop: code in the test JVM still talks to Maven over surefire's
+  channel, so deliberately forged reports are not ruled out, and Docker's shared kernel is the usual container boundary.
+  The verifier is independent of the agent and of its side effects between checks, not of the environment that runs the code.
 - **Scope.** Two small Java fixtures (a discount service and a retry policy), at most two editable files each, one model, small
   samples; the API and UI still run only the default project. No multi-language or multi-repository support, no memory, no
   multi-agent flow.
@@ -172,7 +177,7 @@ projects/          one manifest per project (editable files, checks, protected t
 fixtures/          discount-service and retry-policy (editable projects) and their seeds (prepared defects)
 acceptance-tests*/ protected tests + requirements.json per project, injected by the verifier, outside the editable workspace
 evaluations/       task contracts, per-task oracles, harness, report, RESULTS.md
-tests/             209 tests (Docker is real; only the model API boundary is mocked)
+tests/             211 tests (Docker is real; only the model API boundary is mocked)
 ```
 
 Generated runs go to `evidence/` (git-ignored).
