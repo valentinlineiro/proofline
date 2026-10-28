@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from proofline import model_client, verifier
 from proofline.agent_loop import run_task
+from proofline import budget
 from proofline.evidence import verify_chain
 from proofline.project import DEFAULT_ID, Project, ProjectError, _inside, load as load_project
 from proofline.runner import RunResult
@@ -168,6 +169,7 @@ def run_one(t: EvalTask, model: str, n: int) -> dict:
                 stack.enter_context(_faulty_runner(fault_sel))
             if sim:  # no real API involved: a dummy key must not be required
                 stack.enter_context(patch.dict(os.environ, {"MODEL_API_KEY": "simulated"}))
+                os.environ.pop(budget.ENV, None)  # simulated calls never touch the real-call ledger (patch.dict restores it)
                 stack.enter_context(_fake_model(sim, agent.editable[0]))
             result = run_task(t.task, agent.fixture, ws, OUT / f"{name}.jsonl", name, verify_first=bool(t.seed), project=agent)
         duration = round(time.monotonic() - started, 1)
@@ -183,7 +185,8 @@ def run_one(t: EvalTask, model: str, n: int) -> dict:
             "missing_evidence": None if model == "sim-bad" else sorted(set(t.expected_evidence) - _evidence_facts(OUT / f"{name}.jsonl")),
             "model_summary": edits[-1]["summary"] if edits else None,
             "question": next((r["question"] for r in recs if r["kind"] == "clarification_request"), None),
-            "project": t.project, "duration_s": duration, "usage": _usage_totals(recs)}
+            "project": t.project, "duration_s": duration, "usage": _usage_totals(recs),
+            "budget_exhausted": any(r["kind"] == "model_error" and r["error"].startswith("call budget") for r in recs)}
 
 
 def select(ids: list[str], project: str | None) -> list[EvalTask]:
@@ -216,12 +219,21 @@ def main(argv: list[str]) -> None:
             profile(t)
     except (ProjectError, FileNotFoundError, ValueError) as e:
         raise SystemExit(f"error: {e}")
-    rows = [run_one(t, model, n) for t in tasks for n in range(repeat)]
+    rows = []
+    for t in tasks:
+        for n in range(repeat):
+            rows.append(run_one(t, model, n))
+            if rows[-1]["budget_exhausted"]:
+                break
+        if rows and rows[-1]["budget_exhausted"]:
+            break  # stop the whole batch at the call cap: never move on to the next run or task
     for pid in sorted({r["project"] for r in rows}):  # one summary per project: results of different fixtures are never mixed
         mine = [r for r in rows if r["project"] == pid]
         (OUT / (f"summary-{model}.json" if pid == DEFAULT_ID else f"summary-{model}-{pid}.json")).write_text(json.dumps(mine, indent=2))
     for r in rows:
         print(r)
+    if rows[-1]["budget_exhausted"]:
+        raise SystemExit("STOPPED: the call budget is spent; the remaining runs were not started")
 
 
 if __name__ == "__main__":
