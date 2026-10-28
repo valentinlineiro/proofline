@@ -4,7 +4,7 @@
 
 **An agent saying "done" is a claim. Proofline asks for evidence.**
 
-**Demo video (2 min, with narration and captions):** https://youtu.be/Od3OAgy3rRA — scene 1 is a real Muse Spark run with a defect we prepared; scene 2 uses a simulated model.
+**Demo video (2 min, with narration and captions):** https://youtu.be/1qrXtrT1ETg — scene 1 is a real Muse Spark run with a defect we prepared; scene 2 uses a simulated model.
 
 Proofline lets a coding agent (Meta's Muse Spark) change a Java/Maven project, then judges the change with checks that
 the agent neither writes nor runs: protected acceptance tests executed in a network-less Docker container. The verdict is
