@@ -183,6 +183,10 @@ MODEL_CALL_BUDGET_FILE=$PWD/evidence/eval-rp2-budget.json PROOFLINE_EVAL_OUT=$PW
 
 Evidence (both chains verify): [`evidence-samples/rp2/`](../evidence-samples/rp2/).
 
+**What kind of task it is.** The workspace does not start from the empty skeleton: it already holds a complete `RetryPolicy`/`Backoff`
+implementation (the seed) with one boundary defect. `RP2` measures repairing one known defect in a prepared implementation, not implementing
+the retry policy, which is what `RP1` measures. The two must not be read as one result.
+
 **What it shows:** the whole repair path on the second project with the real model: a real verifier `FAIL`, an edit made from that
 output, a `PASS` on the protected checks.
 

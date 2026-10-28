@@ -135,7 +135,8 @@ with its own manifest and protected tests. Results are reported **separately** f
 - **Read with care.** The oracle runs the same checks as the agent's verification here, so it confirms reproducibility, not that the
   tests are sufficient. The task was fully specified, no failure was observed, and it is one model, one task and three runs: a first
   signal, not a success rate.
-- 1 real run of `RP2` (a defect **we** seeded; the task text states the correct condition): the verifier failed it first, the model repaired it
+- 1 real run of `RP2`: a repair of one boundary defect **we** seeded in an already implemented policy (not an implementation from scratch like
+  `RP1`; the task text states the correct condition): the verifier failed it first, the model repaired it
   in one call, `PASS` on all five checks. One run, same-checks oracle. 1 of a 2-call cap used.
 - Evidence: [`evidence-samples/rp1/`](evidence-samples/rp1/), [`evidence-samples/rp2/`](evidence-samples/rp2/); details and caveats in [`evaluations/RESULTS.md`](evaluations/RESULTS.md).
 
