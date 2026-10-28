@@ -85,6 +85,20 @@ def test_shouldRejectASelectorThatNamesNoExistingTest(root):
             put(root, checks=[{"name": "acc_a", "selector": sel}])
 
 
+@pytest.mark.parametrize("where", ["fx", "acc"])
+def test_shouldRejectAnySymlinkInTheFixtureOrTheProtectedTests(root, tmp_path_factory, where):
+    outside = tmp_path_factory.mktemp("outside")
+    (root / where / "evil").symlink_to(outside, target_is_directory=True)  # a directory link: invisible to is_file()
+    with pytest.raises(ProjectError, match="symlinks are not allowed"):
+        put(root)
+
+
+def test_shouldRejectSymlinksInTheSeeds(root, tmp_path_factory):
+    (root / "seeds").mkdir(); (root / "seeds/evil").symlink_to(tmp_path_factory.mktemp("outside"), target_is_directory=True)
+    with pytest.raises(ProjectError, match="symlinks are not allowed"):
+        put(root, seeds="seeds")
+
+
 def test_shouldRejectSymlinksInTheProtectedTests(root, tmp_path_factory):
     outside = tmp_path_factory.mktemp("outside")
     (outside / "T.java").write_text("class T {}")

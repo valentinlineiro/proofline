@@ -84,8 +84,9 @@ def load(project_id: str = DEFAULT_ID, projects_dir: Path = PROJECTS, root: Path
             raise ProjectError(f"editable: not a regular file in the fixture: {e!r}")
     if len(set(m.editable)) != len(m.editable):
         raise ProjectError("editable: duplicate entries")
-    if any(t.is_symlink() for t in acceptance.rglob("*")):
-        raise ProjectError("acceptance: symlinks are not allowed in the protected tests")
+    for d, what in ((fixture, "fixture"), (acceptance, "acceptance"), *(((seeds, "seeds"),) if seeds else ())):
+        if any(t.is_symlink() for t in d.rglob("*")):  # copytree would follow them and pull outside content in
+            raise ProjectError(f"{what}: symlinks are not allowed")
     names = [c.name for c in m.checks]
     if len(set(names)) != len(names):
         raise ProjectError("checks: duplicate names")
