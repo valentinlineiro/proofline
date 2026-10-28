@@ -101,3 +101,11 @@ def test_shouldStillDetectDeletionsRenamesAndModificationsAndRetargetedSymlinks(
     (work / "mod.txt").write_text("b"); (work / "gone.txt").unlink(); (work / "old.txt").rename(work / "new.txt")
     (work / "link").unlink(); (work / "link").symlink_to("mod.txt")  # retargeted
     assert changed_files(base, work) == {"mod.txt", "gone.txt", "old.txt", "new.txt", "link"}  # `same.txt` and `keep` untouched
+
+
+def test_shouldNotConfuseARegularFileWhoseTextLooksLikeASymlinkWithTheSymlink(tmp_path):
+    base, work = tmp_path / "base", tmp_path / "work"; base.mkdir(); work.mkdir()
+    (base / "x").write_text("symlink:foo"); (work / "x").symlink_to("foo")  # same bytes as the old representation
+    assert changed_files(base, work) == {"x"}
+    (work / "x").unlink(); (work / "x").write_text("L:foo")
+    assert changed_files(base, work) == {"x"}
