@@ -121,7 +121,7 @@ MODEL_CALL_BUDGET_FILE=$PWD/evidence/eval-rp1/budget.json PROOFLINE_EVAL_OUT=$PW
 ```
 
 Three independent runs, each from a clean workspace. Cap: 9 model calls (a persistent ledger, counted before each call); **3 were used**,
-6 remain unused. Only synthetic code was sent. `RP2` (repair of the seeded off-by-one) was **not** run with the real model.
+6 remain unused. Only synthetic code was sent. `RP2` was run afterwards, once, under its own cap (see the next subsection).
 
 | Run | Verdict | Oracle | Attempts / calls | Requirements | Agent loop time | Tokens in / out / total |
 |---|---|---|---|---|---|---|
@@ -161,3 +161,31 @@ manifest, per-call token records and the call cap.
 - **How sensitive the tests are** is supported only by a hand-run check of eight plausible wrong implementations of the correct solution
   (exact-class match, retrying unknown errors, missing null/range/argument checks, no cap, exponent off by one, no saturation): the
   protected tests rejected all eight; two are kept in the automated suite. That is a small sanity check, not exhaustive mutation testing.
+
+### `RP2`: repair of a seeded defect, one real run
+
+28 October 2026, on `main` at `6bde693` (after the verifier-isolation fix), real Muse Spark (`muse-spark-1.3-contributor`, native tool
+calling). The workspace starts with an off-by-one **we seeded** in `RetryPolicy.decide` (`<=` instead of `<` on the attempt limit); the
+verifier judges it first and the model repairs from that real output. Its own ledger capped it at 2 calls (**1 used**); the `RP1` ledger
+is untouched. Command:
+
+```
+MODEL_CALL_BUDGET_FILE=$PWD/evidence/eval-rp2-budget.json PROOFLINE_EVAL_OUT=$PWD/evidence/eval-rp2 \
+  .venv/bin/python -m evaluations.harness real 1 --project retry-policy RP2
+```
+
+| Step | Result |
+|---|---|
+| Seeded workspace, before any model call | `FAIL`: `acceptance_attempt_limit` fails, the other four checks pass |
+| Model repair (1 call, 1,985 in / 1,590 out tokens, 48.9 s) | one edit: `failedAttempts <= maxAttempts` to `failedAttempts < maxAttempts` |
+| Re-verification | `PASS`, five checks pass, all three requirements verified (`fully_verified`) |
+| Oracle | `PASS` |
+
+Evidence (both chains verify): [`evidence-samples/rp2/`](../evidence-samples/rp2/).
+
+**What it shows:** the whole repair path on the second project with the real model: a real verifier `FAIL`, an edit made from that
+output, a `PASS` on the protected checks.
+
+**What it does not show:** the defect is ours, not a mistake the model made. The task text already states the correct condition
+(`failedAttempts < maxAttempts`), so the repair is close to restating it. It is a single run, the oracle runs the same five checks (it
+confirms reproducibility, not sufficiency), and the model needed one call, so a repair that takes several rounds was not exercised.
