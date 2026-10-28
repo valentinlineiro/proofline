@@ -7,7 +7,7 @@
 **Demo video (2 min, with narration and captions):** https://youtu.be/1qrXtrT1ETg — scene 1 is a real Muse Spark run with a defect we prepared; scene 2 uses a simulated model.
 
 Proofline lets a coding agent (Meta's Muse Spark) change a Java/Maven project, then judges the change with checks that
-the agent neither writes nor runs: protected acceptance tests executed in a network-less Docker container. The verdict is
+the agent neither writes nor runs ("independent" means independent of the agent, not of the tests; see Limitations): protected acceptance tests executed in a network-less Docker container. The verdict is
 `PASS`, `FAIL`, `INCONCLUSIVE` or `NEEDS_CLARIFICATION`, and it comes only from the verifier and a hash-chained evidence
 log, never from the model's own account.
 
@@ -53,7 +53,7 @@ anything was verified; it makes no claim about the code. A question asked after 
 ## Install
 
 ```bash
-git clone <this-repo> proofline && cd proofline
+git clone https://github.com/valentinlineiro/proofline.git proofline && cd proofline
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 
@@ -104,9 +104,10 @@ The API is local-only and unauthenticated, and runs one job at a time. Do not ex
 ## Evaluation
 
 See [`evaluations/RESULTS.md`](evaluations/RESULTS.md) for the full tables and caveats. Summary, real Muse Spark runs, 3–5 runs
-per task, one fixture, two rounds:
+per task, one fixture, three rounds of the same 10-task battery (so 102 runs are repeats, not 102 distinct cases), all on
+`muse-spark-1.3-contributor` (see the note on the tier above):
 
-- Simple and edge-case tasks (S1–S3, E1–E3): 18/18 `PASS` on the first attempt, in both rounds.
+- Simple and edge-case tasks (S1–S3, E1–E3): 18/18 `PASS` on the first attempt, in each round (18 runs per round).
 - U2 (a mandatory check cannot run): 5/5 `INCONCLUSIVE`, no repair attempted.
 - A2 (ambiguous boundary): 3/3 failed for real first and were repaired from the verifier's output. This is evidence-guided repair,
   not understanding of intent.
