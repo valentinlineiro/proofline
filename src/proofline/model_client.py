@@ -7,6 +7,7 @@ from typing import Callable
 from openai import OpenAI
 from pydantic import BaseModel, ValidationError, model_validator
 
+from . import budget
 from .workspace import Edit
 
 BASE_URL = "https://api.meta.ai/v1"
@@ -88,7 +89,13 @@ def propose_edits(task: str, files: dict[str, str], feedback: str = "", timeout_
     model = os.environ.get("MODEL_NAME", "muse-spark-1.3")
     shown = "\n\n".join(f"=== {p} ===\n{c}" for p, c in files.items())
     user = f"Task: {task}\n\nEditable files:\n{shown}" + (f"\n\nThe verifier rejected your last attempt:\n{feedback}" if feedback else "")
-    client = OpenAI(api_key=key, base_url=BASE_URL, timeout=timeout_s, max_retries=1)
+    ledger = os.environ.get(budget.ENV)  # set: hard cap on real calls; the SDK must not retry behind the counter's back
+    client = OpenAI(api_key=key, base_url=BASE_URL, timeout=timeout_s, max_retries=0 if ledger else 1)
+    if ledger:
+        try:
+            budget.reserve(ledger)  # counted before the request leaves; a refused reservation never contacts the API
+        except budget.BudgetError as e:
+            raise ModelError(f"call budget: {e}") from None
     try:
         resp = client.chat.completions.create(
             model=model, tools=TOOLS, tool_choice="auto",  # the API only supports "auto": a text-only reply must fail closed
