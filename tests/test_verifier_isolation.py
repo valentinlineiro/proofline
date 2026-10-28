@@ -29,6 +29,7 @@ public class DiscountService {
         attack("service-source", "/w/src/main/java/shop/DiscountService.java", "// replaced");
         attack("pom", "/w/pom.xml", "<project/>");
         attack("compiled-test", "/w/target/test-classes/shop/AcceptanceDiscountTest.class", "x");
+        attack("report", "/w/target/surefire-reports/TEST-shop.AcceptanceDiscountTest.xml", "<testsuite/>");
         attack("workspace-marker", "/w/MARKER", "x");
         try {
             ProcessHandle parent = ProcessHandle.current().parent().get();
@@ -64,6 +65,10 @@ def test_shouldDenyEveryWriteAndSignalWhenModelCodeRunsInsideTheTestJvm(tmp_path
     log = ev.read_text()
     out = "".join(json.loads(line).get("stdout_tail", "") for line in log.splitlines())
     attempts = [l for l in out.splitlines() if l.startswith("ATTACK ")]
+    planned = ["test-source", "service-source", "pom", "compiled-test", "report", "workspace-marker", "kill-parent"]
     assert attempts, "the hostile initializer never ran: the test proves nothing"
-    assert not [l for l in attempts if l.endswith(("WROTE", "KILLED"))], attempts
+    # every planned attack must have run and been denied (in every check that loads the class), none may be missing
+    for name in planned:
+        outcomes = {l.split()[2] for l in attempts if l.split()[1] == name}
+        assert outcomes == {"DENIED"}, (name, outcomes)
     assert not (ws / "MARKER").exists() and (ws / SERVICE).read_text() == HOSTILE  # nothing leaked back to the workspace
