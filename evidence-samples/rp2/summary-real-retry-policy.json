@@ -1,0 +1,26 @@
+[
+  {
+    "task": "RP2",
+    "group": "simple",
+    "model": "real",
+    "run": 0,
+    "verdict": "PASS",
+    "oracle_verdict": "PASS",
+    "outcome": "TRUE_PASS",
+    "attempts": 1,
+    "expected_verdict": "PASS",
+    "clarification_required": false,
+    "missing_evidence": [],
+    "model_summary": "Fix RetryPolicy off-by-one: retry only when failedAttempts < maxAttempts.",
+    "question": null,
+    "project": "retry-policy",
+    "duration_s": 48.9,
+    "usage": {
+      "model_calls": 1,
+      "calls_with_usage": 1,
+      "input_tokens": 1985,
+      "output_tokens": 1590
+    },
+    "budget_exhausted": false
+  }
+]

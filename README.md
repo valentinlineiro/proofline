@@ -78,7 +78,7 @@ Without a key, a run ends `INCONCLUSIVE` with `MODEL_API_KEY is not set`; it nev
 ## Run
 
 ```bash
-.venv/bin/pytest -q                                   # 211 tests, ~9 min, needs Docker + the warm cache, no API key
+.venv/bin/pytest -q                                   # 213 tests, ~9 min, needs Docker + the warm cache, no API key
 .venv/bin/uvicorn proofline.api:app --port 8765       # then open http://localhost:8765
 ```
 
@@ -120,7 +120,7 @@ per task, on the discount-service fixture, three rounds of the same 10-task batt
   `PASS` was observed. That is not evidence that none can occur.
 
 Not to be confused with the test suite: the evaluation is the same 10-task battery run three times with the real model (34 runs per round, 102 runs in
-total). The automated suite is a separate set of 211 tests that needs no API key.
+total). The automated suite is a separate set of 213 tests that needs no API key.
 
 Simulated-model runs (`sim`, `sim-bad`) validate the harness and the oracle, not Muse Spark. Reproduce the real battery with
 `.venv/bin/python -m evaluations.harness real 3 S1 S2 S3 E1 E2 E3 A1 A2` and `... real 5 U1 U2`.
@@ -134,8 +134,11 @@ with its own manifest and protected tests. Results are reported **separately** f
   one model call each, no repair; 4,275 input and 10,915 output tokens in total as reported by the API. 3 of a 9-call cap were used.
 - **Read with care.** The oracle runs the same checks as the agent's verification here, so it confirms reproducibility, not that the
   tests are sufficient. The task was fully specified, no failure was observed, and it is one model, one task and three runs: a first
-  signal, not a success rate. The seeded-defect repair (`RP2`) was not run with the real model.
-- Evidence: [`evidence-samples/rp1/`](evidence-samples/rp1/); details and caveats in [`evaluations/RESULTS.md`](evaluations/RESULTS.md).
+  signal, not a success rate.
+- 1 real run of `RP2`: a repair of one boundary defect **we** seeded in an already implemented policy (not an implementation from scratch like
+  `RP1`; the task text states the correct condition): the verifier failed it first, the model repaired it
+  in one call, `PASS` on all five checks. One run, same-checks oracle. 1 of a 2-call cap used.
+- Evidence: [`evidence-samples/rp1/`](evidence-samples/rp1/), [`evidence-samples/rp2/`](evidence-samples/rp2/); details and caveats in [`evaluations/RESULTS.md`](evaluations/RESULTS.md).
 
 Select a project and plan a run without spending anything (no workspace, no model call):
 
@@ -177,7 +180,7 @@ projects/          one manifest per project (editable files, checks, protected t
 fixtures/          discount-service and retry-policy (editable projects) and their seeds (prepared defects)
 acceptance-tests*/ protected tests + requirements.json per project, injected by the verifier, outside the editable workspace
 evaluations/       task contracts, per-task oracles, harness, report, RESULTS.md
-tests/             211 tests (Docker is real; only the model API boundary is mocked)
+tests/             213 tests (Docker is real; only the model API boundary is mocked)
 ```
 
 Generated runs go to `evidence/` (git-ignored).

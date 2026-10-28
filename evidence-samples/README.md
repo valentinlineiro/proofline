@@ -10,6 +10,7 @@ checked. A sample, not everything: the full set of runs is not published.
 | `round3/traces/*-real-0.jsonl` | One real Muse Spark trace per evaluation task, **native tool calling** (the current client). `A1` ends `NEEDS_CLARIFICATION`; `U2` ends `INCONCLUSIVE` because a mandatory check was made to fail on purpose. |
 | `round2/traces/*-real-0.jsonl` | Same tasks with the previous client (JSON asked for in the prompt). |
 | `rp1/` | **Second fixture (`retry-policy`), three real Muse Spark runs of `RP1`** (28 Oct 2026): 3 agent traces, 3 oracle traces, `summary-real-retry-policy.json` and `budget-ledger.json` (call cap 9, used 3). Native tool calling, per-call token usage recorded. See the last section of `RESULTS.md`. |
+| `rp2/` | **`retry-policy`, one real Muse Spark run of `RP2`** (28 Oct 2026): a repair of an off-by-one *we* seeded. Agent trace, oracle trace, `summary-real-retry-policy.json`, `budget-ledger.json` (own cap 2, used 1). See `RESULTS.md`. |
 | `round1/`, `round2/`, `round3/` `summary-*.json` | One row per run (all repetitions): verdict, independent-oracle verdict, outcome class, attempts. |
 
 Each line is a record with the SHA-256 of the previous one. To verify a file:
