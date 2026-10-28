@@ -74,3 +74,30 @@ def test_shouldDetectAddedAndDeletedFiles(ws, tmp_path):
     assert changed_files(BASE, ws) == {"src/main/java/shop/Backdoor.java", "src/test/java/shop/DiscountServiceTest.java"}
     assert verify(BASE, ws, tmp_path / "ev.jsonl")["verdict"] == "FAIL"
 
+
+@pytest.mark.parametrize("kind", ["new_dir_link", "new_file_link", "dir_replaced_by_link"])
+def test_shouldTreatSymlinksAsChangedFilesAndVerifierShouldFailBeforeRunningMaven(tmp_path, kind):
+    """A symlink (to a directory too) is a change outside the allowlist: the verifier must FAIL without running Maven."""
+    from unittest.mock import patch
+    outside = tmp_path / "outside"; outside.mkdir(); (outside / "x.java").write_text("class X {}")
+    ws = tmp_path / "ws"; shutil.copytree(BASE, ws)
+    if kind == "new_dir_link":
+        (ws / "src/main/java/evil").symlink_to(outside, target_is_directory=True)
+    elif kind == "new_file_link":
+        (ws / "src/main/java/shop/Evil.java").symlink_to(outside / "x.java")
+    else:
+        shutil.rmtree(ws / "src/test/java/shop"); (ws / "src/test/java/shop").symlink_to(outside, target_is_directory=True)
+    assert changed_files(BASE, ws)
+    with patch("proofline.verifier.run_maven") as maven:
+        r = verify(BASE, ws, tmp_path / "ev.jsonl")
+    assert r["verdict"] == "FAIL" and maven.call_count == 0
+
+
+def test_shouldStillDetectDeletionsRenamesAndModificationsAndRetargetedSymlinks(tmp_path):
+    base, work = tmp_path / "base", tmp_path / "work"
+    for d in (base, work):
+        d.mkdir(); (d / "same.txt").write_text("s"); (d / "mod.txt").write_text("a"); (d / "gone.txt").write_text("g"); (d / "old.txt").write_text("o")
+        (d / "link").symlink_to("same.txt"); (d / "keep").symlink_to("same.txt")
+    (work / "mod.txt").write_text("b"); (work / "gone.txt").unlink(); (work / "old.txt").rename(work / "new.txt")
+    (work / "link").unlink(); (work / "link").symlink_to("mod.txt")  # retargeted
+    assert changed_files(base, work) == {"mod.txt", "gone.txt", "old.txt", "new.txt", "link"}  # `same.txt` and `keep` untouched

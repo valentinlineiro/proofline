@@ -1,4 +1,5 @@
 """Controlled edits: structured search/replace on an explicit allowlist, validated before anything is written."""
+import os
 from pathlib import Path, PurePosixPath
 
 from pydantic import BaseModel
@@ -47,7 +48,9 @@ def apply_edits(root: Path, edits: list[Edit], allowed: tuple[str, ...] = ALLOWE
 
 def changed_files(base: Path, work: Path) -> set[str]:
     def tree(d: Path) -> dict[str, bytes]:
-        return {str(p.relative_to(d)): p.read_bytes() for p in d.rglob("*")
-                if p.is_file() and "target" not in p.relative_to(d).parts}
+        # a symlink is an entry of its own (its target text): is_file() alone misses links to directories, and
+        # copytree would later follow them and pull outside content into the sandbox without any diff
+        return {str(p.relative_to(d)): (b"symlink:" + os.readlink(p).encode() if p.is_symlink() else p.read_bytes())
+                for p in d.rglob("*") if (p.is_symlink() or p.is_file()) and "target" not in p.relative_to(d).parts}
     a, b = tree(base), tree(work)
     return {k for k in a.keys() | b.keys() if a.get(k) != b.get(k)}
