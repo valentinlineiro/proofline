@@ -168,3 +168,63 @@ def test_shouldBeUsableFromTheCommandLine(tmp_path):
     assert run("init", str(f), "9").returncode == 0 and "'remaining': 9" in run("status", str(f)).stdout
     assert run("init", str(f), "9").returncode != 0           # no reset
     assert run("init", str(tmp_path / "x"), "zero").returncode != 0
+
+
+RACER = """
+import sys, time
+from pathlib import Path
+from proofline.budget import reserve, BudgetError
+ledger, go = sys.argv[1], Path(sys.argv[2])
+while not go.exists():          # every process spins here until the same instant, then they all hit the ledger together
+    pass
+try:
+    reserve(ledger); print("OK")
+except BudgetError:
+    print("REFUSED")
+"""
+
+
+@pytest.mark.parametrize("limit,racers", [(1, 24), (9, 30)])
+def test_shouldGiveTheLastSlotsToExactlyTheRightNumberOfSimultaneousProcesses(tmp_path, limit, racers):
+    for round_ in range(3):  # repeat: a race that is lost once in a while must show up
+        f, go = tmp_path / f"b{round_}.json", tmp_path / f"go{round_}"
+        budget.init(f, limit)
+        procs = [subprocess.Popen([sys.executable, "-c", RACER, str(f), str(go)], stdout=subprocess.PIPE, text=True) for _ in range(racers)]
+        go.touch()
+        outs = [p.communicate()[0].strip() for p in procs]
+        assert outs.count("OK") == limit and outs.count("REFUSED") == racers - limit, outs
+        assert used(f) == limit
+
+
+def test_shouldHaveASingleCountedRouteToTheModelApiInTheSourceTree():
+    """No module other than model_client may build an API client or send a completion; the one documented exception is the
+    pre-flight listing in scripts/demo-prep.sh, which lists models and never generates text."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    clients = [p.relative_to(root).as_posix() for d in ("src", "evaluations", "scripts") for p in (root / d).rglob("*")
+               if p.is_file() and p.suffix in (".py", ".sh") and "OpenAI(" in p.read_text()]
+    assert sorted(clients) == ["scripts/demo-prep.sh", "src/proofline/model_client.py"]
+    demo = (root / "scripts/demo-prep.sh").read_text()
+    assert ".models.list()" in demo and "chat.completions" not in demo and ".create(" not in demo
+    sends = [p.relative_to(root).as_posix() for d in ("src", "evaluations", "scripts") for p in (root / d).rglob("*")
+             if p.is_file() and p.suffix in (".py", ".sh") and "chat.completions.create(" in p.read_text()]
+    assert sends == ["src/proofline/model_client.py"]  # (the harness only configures a MagicMock attribute: no call syntax)
+    for d in ("src", "evaluations", "scripts"):        # no other HTTP route to the API host
+        assert not [p for p in (root / d).rglob("*") if p.is_file() and p.suffix in (".py", ".sh") and p.name != "model_client.py"
+                    and "api.meta.ai" in p.read_text() and p.name != "demo-prep.sh"]
+
+
+def test_shouldPrintTheLaunchPlanWithoutSpendingAnythingOnADryRun(tmp_path, ledger, monkeypatch, capsys):
+    monkeypatch.setattr(harness, "OUT", tmp_path / "eval")
+    monkeypatch.setattr(model_client, "OpenAI", lambda **kw: pytest.fail("a dry run must not create a model client"))
+    harness.main(["real", "3", "--project", "retry-policy", "RP1", "--dry-run"])
+    plan = json.loads(capsys.readouterr().out)
+    assert [t["id"] for t in plan["tasks"]] == ["RP1"] and plan["tasks"][0]["seed"] is None  # three runs of RP1, and no RP2
+    assert (plan["runs"], plan["max_calls_per_run"], plan["worst_case_model_calls"]) == (3, 3, 9)
+    assert plan["call_budget"] == {"limit": 9, "used": 0, "remaining": 9} and plan["uses_real_api"] and plan["model"]
+    assert used(ledger) == 0 and not (tmp_path / "eval").exists()  # nothing was created, nothing was counted
+
+
+def test_shouldRefuseADryRunOfAnInvalidSelectionToo(ledger, monkeypatch):
+    with pytest.raises(SystemExit, match="unknown project"):
+        harness.main(["real", "3", "--project", "nope", "--dry-run"])

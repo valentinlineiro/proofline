@@ -15,9 +15,8 @@ from unittest.mock import MagicMock, patch
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from proofline import model_client, verifier
-from proofline.agent_loop import run_task
-from proofline import budget
+from proofline import budget, model_client, verifier
+from proofline.agent_loop import MAX_REPAIRS, run_task
 from proofline.evidence import verify_chain
 from proofline.project import DEFAULT_ID, Project, ProjectError, _inside, load as load_project
 from proofline.runner import RunResult
@@ -198,9 +197,13 @@ def select(ids: list[str], project: str | None) -> list[EvalTask]:
 
 
 def main(argv: list[str]) -> None:
-    """usage: python -m evaluations.harness sim|sim-bad|real [REPEAT] [--project ID] [TASK_ID ...]"""
+    """usage: python -m evaluations.harness sim|sim-bad|real [REPEAT] [--project ID] [--dry-run] [TASK_ID ...]
+    --dry-run validates the selection and prints the plan (tasks, runs, worst-case model calls, call budget): no workspace,
+    no Maven, no model call."""
     args = list(argv)
     model = args.pop(0)
+    dry_run = "--dry-run" in args
+    args = [a for a in args if a != "--dry-run"]
     project = None
     if "--project" in args:
         i = args.index("--project")
@@ -219,6 +222,17 @@ def main(argv: list[str]) -> None:
             profile(t)
     except (ProjectError, FileNotFoundError, ValueError) as e:
         raise SystemExit(f"error: {e}")
+    if dry_run:
+        try:
+            ledger = budget.status(os.environ[budget.ENV]) if budget.ENV in os.environ else None
+        except budget.BudgetError as e:
+            ledger = f"unusable: {e}"
+        runs = len(tasks) * repeat
+        print(json.dumps({"mode": model, "uses_real_api": model == "real", "model": os.environ.get("MODEL_NAME", "muse-spark-1.3") if model == "real" else None,
+                          "tasks": [{"id": t.id, "project": t.project, "seed": t.seed, "fixture": str(profile(t)[0].fixture.relative_to(ROOT))} for t in tasks],
+                          "runs": runs, "max_calls_per_run": 1 + MAX_REPAIRS, "worst_case_model_calls": runs * (1 + MAX_REPAIRS) if model == "real" else 0,
+                          "call_budget": ledger}, indent=2))
+        return
     rows = []
     for t in tasks:
         for n in range(repeat):
