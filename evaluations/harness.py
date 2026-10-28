@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from proofline import model_client, verifier
 from proofline.agent_loop import run_task
 from proofline.evidence import verify_chain
-from proofline.project import DEFAULT_ID, Project, ProjectError, load as load_project
+from proofline.project import DEFAULT_ID, Project, ProjectError, _inside, load as load_project
 from proofline.runner import RunResult
 from proofline.verifier import ROOT, verify
 
@@ -67,12 +67,18 @@ def profile(t: EvalTask) -> tuple[Project, Project]:
     define is an error, never a silent fallback to another project."""
     base = load_project(t.project)
     full = tuple((n, sel) for n, sel in t.checks) if t.checks else base.checks
+    if t.checks and not t.acceptance_dir and not set(full) <= set(base.checks):
+        # a task may bring its own oracle (acceptance_dir + checks); without one it can only use what the manifest defines
+        raise ProjectError(f"task {t.id}: checks not defined by project {t.project!r}: {sorted(set(full) - set(base.checks))}")
     unknown = sorted((set(t.mandatory_checks) | ({t.fault} if t.fault else set())) - {n for n, _ in full})
     if unknown:
         raise ProjectError(f"task {t.id}: checks not defined for project {t.project!r}: {unknown}")
     if t.seed and not (re.fullmatch(r"[a-z0-9][a-z0-9-]*", t.seed) and base.seeds and (base.seeds / t.seed).is_dir()):
         raise ProjectError(f"task {t.id}: project {t.project!r} has no seed {t.seed!r}")
-    oracle = replace(base, checks=full, acceptance=ROOT / t.acceptance_dir if t.acceptance_dir else base.acceptance)
+    acceptance = _inside(ROOT, t.acceptance_dir, "acceptance_dir") if t.acceptance_dir else base.acceptance  # stays inside the repo
+    if not acceptance.is_dir() or any(x.is_symlink() for x in acceptance.rglob("*")):
+        raise ProjectError(f"task {t.id}: acceptance_dir must be a directory without symlinks")
+    oracle = replace(base, checks=full, acceptance=acceptance)
     return replace(oracle, checks=tuple(c for c in full if c[0] in t.mandatory_checks)), oracle
 
 

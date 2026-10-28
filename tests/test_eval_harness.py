@@ -135,6 +135,23 @@ def test_shouldFailClosedWhenATaskNamesACheckTheProjectDoesNotDefine(out):
             harness.profile(harness.load("RP1").model_copy(update=update))
 
 
+def test_shouldNotLetATaskWeakenTheOracleWithChecksTheManifestDoesNotDefine(out):
+    rp = harness.load("RP1")
+    manifest = [list(c) for c in load_project(RP).checks]
+    harness.profile(rp.model_copy(update={"checks": manifest}))                              # the manifest's own list: fine
+    with pytest.raises(ProjectError, match="not defined"):
+        harness.profile(rp.model_copy(update={"checks": manifest + [["extra", "AcceptanceRetryPolicyTest#nothing"]]}))
+    with pytest.raises(ProjectError, match="not defined"):                                   # same name, different selector
+        harness.profile(rp.model_copy(update={"checks": [["maven_tests", "NoSuchTest"]] + manifest[1:]}))
+    harness.profile(harness.load("S1"))                                                      # own oracle (acceptance_dir + checks): allowed
+
+
+@pytest.mark.parametrize("acceptance_dir", ["/etc", "../outside", "evaluations/oracle/NOPE", "README.md"])
+def test_shouldRejectAnOracleDirectoryThatEscapesOrDoesNotExist(out, acceptance_dir):
+    with pytest.raises(ProjectError):
+        harness.profile(harness.load("S1").model_copy(update={"acceptance_dir": acceptance_dir}))
+
+
 def test_shouldFailClosedWhenTheManifestIsInvalid(out, monkeypatch, tmp_path):
     projects = tmp_path / "projects"; projects.mkdir()
     (projects / "retry-policy.json").write_text('{"id": "retry-policy", "surprise": 1}')
