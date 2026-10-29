@@ -121,6 +121,44 @@ def cmd_gate(a) -> int:
     return review.gate(f, Path(a.repo).resolve(), strict=a.strict)
 
 
+def cmd_retry(a) -> int:
+    """Give the agent one more attempt after a rejection: the reviewer's reason and the real check output are its feedback."""
+    import os
+    import tempfile as _tf
+
+    from . import agent_loop, budget
+    f = _run_file(a)
+    if not f or not f.exists() or not review._chain_ok(f):
+        print("no such run, or its evidence chain does not verify", file=sys.stderr)
+        return 2
+    if not os.environ.get("MODEL_API_KEY") or not os.environ.get(budget.ENV):
+        print(f"retry calls the model: set MODEL_API_KEY and {budget.ENV} (a call-budget ledger) first", file=sys.stderr)
+        return 2
+    records = review._records(f)
+    v = review.latest_verification(records)
+    decisions = [r for r in records if r["kind"] == "human_decision" and v and r["run_id"] == v["run_id"]]
+    if not decisions or decisions[-1]["decision"] != "reject":
+        print("nothing to retry: the latest verification was not rejected", file=sys.stderr)
+        return 2
+    attempts = sum(r["kind"] == "model_edits" for r in records)
+    if attempts >= agent_loop.MAX_REPAIRS:
+        print(f"the attempt limit ({agent_loop.MAX_REPAIRS} retries) is used up; the rejection reason stays recorded", file=sys.stderr)
+        return 2
+    repo = Path(a.repo).resolve()
+    p = load_external(repo)
+    start = max(i for i, r in enumerate(records) if r["kind"] == "run_start" and r["run_id"] == v["run_id"])
+    failing = [f"[{c['name']}]\n{c.get('stdout_tail', '')[-1500:]}" for c in records[start:] if c["kind"] == "check" and c["status"] != "PASS"]
+    gaps = [f"- {s['text']} ({s['status']})" for s in v["scope"] if s["status"] != "VERIFIED"]
+    feedback = "\n\n".join([f"A reviewer rejected the last change: {decisions[-1]['reason']}", *failing] + (["Not verified:\n" + "\n".join(gaps)] if gaps else []))
+    task = next(r["task"] for r in records if r["kind"] == "task")
+    with _tf.TemporaryDirectory(prefix="proofline-base-") as tmp:
+        base = review._materialise_base(repo, v.get("base_ref") or {}, Path(tmp))
+        result = agent_loop.retry_after_rejection(task, p, base, repo, EvidenceLog.resume(f), f"{v['run_id']}.r{attempts + 1}", feedback,
+                                                  attempts, v.get("base_ref"), p.manifest)
+    print(f"{result['verdict']}  run={f.stem}  (decide on it again, then gate)")
+    return 0 if result["verdict"] in ("PASS", "FAIL") else 5
+
+
 def cmd_serve(a) -> int:
     import os
 
@@ -154,6 +192,8 @@ def main(argv: list[str] | None = None) -> int:
     grp.add_argument("--run")
     grp.add_argument("--latest", action="store_true")
     g.add_argument("--strict", action="store_true")
+    rt = add("retry", cmd_retry, help="give the agent another attempt after a rejection (needs a model key and a call-budget ledger)")
+    rt.add_argument("--run", required=True)
     s = add("serve", cmd_serve, help="open the review screen on localhost")
     s.add_argument("--port", type=int, default=8765)
     try:

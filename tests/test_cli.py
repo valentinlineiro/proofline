@@ -123,3 +123,74 @@ def test_shouldNeedABaseWhenRepoIsNotGit(tmp_path):
     shutil.copytree(ROOT / "fixtures/discount-service", r)
     cli.main(["init", "--repo", str(r)])
     assert verify(r) == 2
+
+
+# ---- retry: a rejection reason goes back to the agent (simulated model only) ----
+from proofline.model_client import EditSet  # noqa: E402
+from proofline.workspace import Edit  # noqa: E402
+
+
+@pytest.fixture
+def budget(tmp_path, monkeypatch):
+    from proofline import budget as b
+    ledger = tmp_path / "ledger.json"
+    b.init(str(ledger), 3)
+    monkeypatch.setenv("MODEL_API_KEY", "simulated")
+    monkeypatch.setenv("MODEL_CALL_BUDGET_FILE", str(ledger))
+    return ledger
+
+
+def rejected(repo, reason="the rounding is wrong") -> str:
+    verify(repo)
+    run = runs(repo)[0].stem
+    assert cli.main(["decide", "reject", "--repo", str(repo), "--run", run, "--reason", reason]) == 0
+    return run
+
+
+def retry(repo, run, proposal=None):
+    proposal = proposal or EditSet(summary="fixed", edits=[Edit(path=SERVICE, old="// the change", new="// retried")])
+    with patch("proofline.verifier.run_maven", return_value=OK_RUN), \
+         patch("proofline.model_client.propose_edits", return_value=proposal) as model:
+        return cli.main(["retry", "--repo", str(repo), "--run", run]), model
+
+
+def test_shouldRetryWithRejectionReasonAsFeedback(repo, budget):
+    run = rejected(repo)
+    code, model = retry(repo, run)
+    assert code == 0 and model.call_count == 1
+    assert "the rounding is wrong" in model.call_args.args[2]  # propose_edits(task, files, feedback)
+    kinds = [json.loads(l)["kind"] for l in (repo / ".proofline/runs" / f"{run}.jsonl").read_text().splitlines()]
+    last_edit = len(kinds) - 1 - kinds[::-1].index("model_edits")
+    assert last_edit < len(kinds) - 1 - kinds[::-1].index("run_start") and kinds[-1] == "verdict"
+    assert "// retried" in (repo / SERVICE).read_text()
+    assert cli.main(["gate", "--repo", str(repo), "--run", run]) == review.NOT_APPROVED  # the earlier decision judged the old change
+
+
+def test_shouldRefuseRetryWithoutBudgetLedger(repo, monkeypatch):
+    run = rejected(repo)
+    monkeypatch.setenv("MODEL_API_KEY", "simulated")
+    monkeypatch.delenv("MODEL_CALL_BUDGET_FILE", raising=False)
+    code, model = retry(repo, run)
+    assert code == 2 and model.call_count == 0
+
+
+def test_shouldRefuseRetryWhenLastDecisionIsNotARejection(repo, budget):
+    verify(repo)
+    run = runs(repo)[0].stem
+    code, model = retry(repo, run)
+    assert code == 2 and model.call_count == 0
+    cli.main(["decide", "approve", "--repo", str(repo), "--run", run])
+    code, model = retry(repo, run)
+    assert code == 2 and model.call_count == 0
+
+
+def test_shouldRecordReasonOnlyWhenAttemptsAreExhausted(repo, budget):
+    run = rejected(repo)
+    marks = ["// the change", "// r1", "// r2"]
+    for old, new in zip(marks, marks[1:]):  # MAX_REPAIRS = 2 retries are allowed
+        code, model = retry(repo, run, EditSet(summary="s", edits=[Edit(path=SERVICE, old=old, new=new)]))
+        assert code == 0 and model.call_count == 1
+        cli.main(["decide", "reject", "--repo", str(repo), "--run", run, "--reason", "again"])
+    code, model = retry(repo, run)
+    assert code == 2 and model.call_count == 0
+    assert cli.main(["gate", "--repo", str(repo), "--run", run]) == review.REJECTED  # the reason is recorded, nothing else happens
