@@ -4,12 +4,11 @@ from pathlib import Path, PurePosixPath
 
 from pydantic import BaseModel
 
-from .project import load
+from .project import IGNORED_DIRS, load
 
 # Production code the agent may touch (default project; any other project passes its own list). Anything else
 # (tests, acceptance, evidence, pom) is rejected.
 ALLOWED = load().editable
-IGNORED_DIRS = ("target", ".git", ".proofline")  # build output, VCS and Proofline's own records are never part of a change
 
 
 class EditRejected(Exception):
