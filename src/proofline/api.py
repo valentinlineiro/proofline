@@ -1,5 +1,7 @@
 """Local API for the UI. It only starts runs and serves what the evidence files say: the UI never invents a verdict."""
+import getpass
 import json
+import os
 import re
 import threading
 import uuid
@@ -7,18 +9,23 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, StringConstraints
-from typing import Annotated
+from pydantic import BaseModel, ConfigDict, StringConstraints
+from typing import Annotated, Literal
 
 from .agent_loop import DEFAULT_TASK, run_new
+from . import review
 from .evidence import EvidenceLog, verify_chain
 from .verifier import ROOT
 
 load_dotenv(ROOT / ".env")
-EVIDENCE = ROOT / "evidence" / "ui"
+REPO = Path(os.environ["PROOFLINE_REPO"]) if os.environ.get("PROOFLINE_REPO") else None  # set by `proofline serve`
+EVIDENCE = REPO / ".proofline" / "runs" if REPO else ROOT / "evidence" / "ui"
 SEEDS = ROOT / "fixtures" / "seeds"
 app = FastAPI(title="Proofline")
+# a web page must not be able to drive this local API by rebinding its own domain to 127.0.0.1 ("testserver" is the test client)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]", "testserver"])
 _running: dict[str, bool] = {}   # run_id -> still running
 _lock = threading.Lock()         # one run at a time: each run uses Docker and the model
 
@@ -26,6 +33,14 @@ _lock = threading.Lock()         # one run at a time: each run uses Docker and t
 class StartRun(BaseModel):
     task: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)] = DEFAULT_TASK
     seed: str | None = None
+
+
+class Decision(BaseModel):
+    """Only what a person decides. The verdict, the override flag and the hashes are never taken from the client."""
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["approve", "reject"]
+    reason: Annotated[str, StringConstraints(max_length=2000)] = ""
+    reviewer: Annotated[str, StringConstraints(strip_whitespace=True, max_length=80)] = ""
 
 
 def _path(run_id: str) -> Path:
@@ -51,6 +66,8 @@ def seeds() -> list[str]:
 
 @app.post("/api/runs", status_code=202)
 def start(req: StartRun) -> dict:
+    if REPO:
+        raise HTTPException(409, "runs are started with `proofline verify`; this screen only reviews them")
     if req.seed and req.seed not in seeds():
         raise HTTPException(422, "unknown seed")
     if not _lock.acquire(blocking=False):
@@ -78,7 +95,26 @@ def run(run_id: str) -> dict:
         chain_valid = verify_chain(f)
     except json.JSONDecodeError:
         records, chain_valid = [], False
-    return {"run_id": run_id, "running": _running.get(run_id, False), "chain_valid": chain_valid, "records": records}
+    running = _running.get(run_id, False)
+    return {"run_id": run_id, "running": running, "chain_valid": chain_valid, "records": records,
+            "signals": review.signals(records) if chain_valid else [],
+            "gate": review.gate(f, REPO) if REPO and not running else None}  # informational: what `proofline gate` would return now
+
+
+@app.post("/api/runs/{run_id}/decision")
+def decide(run_id: str, body: Decision) -> dict:
+    f = _path(run_id)
+    if not f.exists():
+        raise HTTPException(404)
+    try:
+        return review.decide(f, body.decision, body.reason, body.reviewer or getpass.getuser())
+    except review.ReviewError as e:
+        raise HTTPException(422, str(e)) from None
+
+
+@app.get("/api/mode")
+def mode() -> dict:
+    return {"repo": REPO.name if REPO else None}
 
 
 @app.get("/")

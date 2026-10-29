@@ -8,9 +8,13 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from .adapters import get_adapter
+from .adapters.maven import classify  # noqa: F401  (re-exported: tests and callers import it from here)
+from .change import change_hash, inputs_hash
 from .evidence import EvidenceLog, sha256
 from .project import Project, load
 from .runner import RunResult, run_maven
+from .project import IGNORED_DIRS, is_ignored
 from .workspace import ALLOWED, changed_files
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -25,17 +29,6 @@ class Check:
     name: str
     status: str
     exit_code: int
-
-
-def classify(r: RunResult) -> str:
-    ran = [int(n) for n in re.findall(r"Tests run: (\d+), Failures", r.stdout)]
-    if r.timed_out or r.exit_code in (125, 126, 127) or r.exit_code == -1:
-        return "INCONCLUSIVE"
-    if r.exit_code == 0:
-        return "PASS" if ran and ran[-1] > 0 else "INCONCLUSIVE"  # green with zero tests proves nothing
-    if r.exit_code == 1 and ("COMPILATION ERROR" in r.stdout or "FAILURE!" in r.stdout):
-        return "FAIL"
-    return "INCONCLUSIVE"  # e.g. dependency resolution failed: infra, not code
 
 
 def requirement_scope(requirements: list[dict], ran: dict[str, str]) -> list[dict]:
@@ -62,24 +55,31 @@ def load_requirements(acceptance_dir: Path | None = None) -> list[dict]:
 
 
 def tree_hash(d: Path) -> str:
-    files = sorted(p for p in d.rglob("*") if p.is_file() and "target" not in p.parts)
+    files = sorted(p for p in d.rglob("*") if p.is_file() and not is_ignored(p.relative_to(d)))
     return sha256("".join(f"{p.relative_to(d)}:{sha256(p.read_bytes())}\n" for p in files))
 
 
 def diff(base: Path, work: Path) -> str:
-    out = subprocess.run(["diff", "-ruN", "-x", "target", base, work], capture_output=True, text=True)
+    out = subprocess.run(["diff", "-ruN", *[a for d in IGNORED_DIRS for a in ("-x", d)], base, work], capture_output=True, text=True)
     return out.stdout
 
 
 def verify(base: Path, workspace: Path, evidence_file: Path, run_id: str = "run", log: EvidenceLog | None = None,
-           project: Project | None = None) -> dict:
-    """`project` None = the default project, with the module-level CHECKS / ACCEPTANCE_DIR (patchable by the harness)."""
+           project: Project | None = None, base_ref: dict | None = None, manifest_path: Path | None = None) -> dict:
+    """`base_ref` / `manifest_path`: how the base can be found again and which manifest judged it; recorded so a gate can
+    recompute the canonical change hash later. `project` None = the default project, with the module-level CHECKS / ACCEPTANCE_DIR (patchable by the harness)."""
     allowed, checks_to_run, acceptance, dest_rel = ((project.editable, project.checks, project.acceptance, project.acceptance_dest)
                                                     if project else (ALLOWED, CHECKS, ACCEPTANCE_DIR, _DEFAULT.acceptance_dest))
+    adapter = get_adapter(project.ecosystem if project else _DEFAULT.ecosystem)
     log = log or EvidenceLog(evidence_file)
     patch = diff(base, workspace)
     base_rev = tree_hash(base)
-    log.append("run_start", run_id=run_id, base_revision=base_rev, diff_sha256=sha256(patch), diff=patch)
+    extra = {"change_sha256": change_hash(base, workspace)}  # additive: older records have only diff_sha256
+    if base_ref:
+        extra["base_ref"] = base_ref
+    if manifest_path:
+        extra["inputs_sha256"] = inputs_hash(manifest_path, acceptance)
+    log.append("run_start", run_id=run_id, base_revision=base_rev, diff_sha256=sha256(patch), diff=patch, **extra)
 
     checks: list[Check] = []
     outside = sorted(changed_files(base, workspace) - set(allowed))
@@ -95,14 +95,14 @@ def verify(base: Path, workspace: Path, evidence_file: Path, run_id: str = "run"
         for i, (name, selector) in enumerate(checks_to_run):
             # one pristine sandbox per check: nothing a check leaves behind (files, target/) reaches the next one
             sandbox = Path(tmp) / f"w{i}"
-            shutil.copytree(workspace, sandbox, ignore=shutil.ignore_patterns("target"))
+            shutil.copytree(workspace, sandbox, ignore=lambda d, names: IGNORED_DIRS if Path(d) == workspace else ())  # root-level only
             # inject protected tests last so the workspace cannot shadow or alter them
             dest = sandbox / dest_rel
             dest.mkdir(parents=True, exist_ok=True)
             for t in acceptance.glob("*.java"):
                 shutil.copy(t, dest / t.name)
-            r = run_maven(sandbox, ["test", f"-Dtest={selector}", "-Dsurefire.failIfNoSpecifiedTests=true"])
-            status = classify(r)
+            r = adapter.run_check(sandbox, selector, run=run_maven)
+            status = adapter.classify(r)
             checks.append(Check(name, status, r.exit_code))
             if status == "FAIL":
                 failures.append({"name": name, "tail": r.stdout[-1500:]})

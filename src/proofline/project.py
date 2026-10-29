@@ -11,6 +11,12 @@ ROOT = Path(__file__).resolve().parents[2]
 PROJECTS = ROOT / "projects"
 DEFAULT_ID = "discount-service"
 ID_RE = r"[a-z0-9][a-z0-9-]*"
+IGNORED_DIRS = ("target", ".git", ".proofline")  # build output, VCS and Proofline's own records are never part of a change
+
+
+def is_ignored(rel: Path) -> bool:
+    """Only the repository's own top-level directories are ignored: `src/main/java/p/target/X.java` is source and counts."""
+    return bool(rel.parts) and rel.parts[0] in IGNORED_DIRS
 
 
 class ProjectError(Exception):
@@ -35,6 +41,7 @@ class _Manifest(_Strict):
     editable: list[str] = Field(min_length=1)
     checks: list[_Check] = Field(min_length=1)
     default_task: str = Field(min_length=1)
+    ecosystem: str = "java-maven"
 
 
 @dataclass(frozen=True)
@@ -47,6 +54,9 @@ class Project:
     editable: tuple[str, ...]            # the only files the agent may change, relative to the fixture
     checks: tuple[tuple[str, str], ...]  # (check name, surefire selector)
     default_task: str
+    ecosystem: str = "java-maven"
+    root: Path | None = None             # what every manifest path is relative to (the Proofline repo, or the external repo)
+    manifest: Path | None = None
 
 
 def _inside(base: Path, rel: str, what: str) -> Path:
@@ -69,8 +79,42 @@ def load(project_id: str = DEFAULT_ID, projects_dir: Path = PROJECTS, root: Path
         raise ProjectError(f"unknown project: {project_id!r}") from None
     except ValueError as e:  # malformed JSON, unknown keys, wrong types
         raise ProjectError(f"invalid manifest {f.name}: {e}") from e
+    from .adapters import get_adapter
+    get_adapter(m.ecosystem)  # an unknown ecosystem is an explicit error at load time
     if m.id != project_id:
         raise ProjectError(f"manifest {f.name} declares id {m.id!r}")
+    return _build(m, root, f)
+
+
+class _ExternalManifest(_Strict):
+    """`.proofline/project.json` of a repository: the repository itself is the fixture, so there is no fixture or seeds key."""
+    id: str = Field(pattern=f"^{ID_RE}$")
+    acceptance: str = ".proofline/acceptance"
+    acceptance_dest: str
+    editable: list[str] = Field(min_length=1)
+    checks: list[_Check] = Field(min_length=1)
+    default_task: str = "Verify the change."
+    ecosystem: str = "java-maven"
+
+
+def load_external(repo: Path) -> Project:
+    """A project that lives in someone else's repository: same strict validation, with `repo` as the root."""
+    repo = repo.resolve()
+    f = repo / ".proofline" / "project.json"
+    try:
+        e = _ExternalManifest.model_validate_json(f.read_text())
+    except FileNotFoundError:
+        raise ProjectError(f"no {f.relative_to(repo)} in {repo.name!r}: run `proofline init` first") from None
+    except ValueError as err:
+        raise ProjectError(f"invalid manifest {f.name}: {err}") from err
+    m = _Manifest(id=e.id, fixture=".", acceptance=e.acceptance, acceptance_dest=e.acceptance_dest, editable=e.editable,
+                  checks=e.checks, default_task=e.default_task, ecosystem=e.ecosystem)
+    return _build(m, repo, f)
+
+
+def _build(m: _Manifest, root: Path, manifest: Path) -> Project:
+    from .adapters import get_adapter
+    get_adapter(m.ecosystem)  # an unknown ecosystem is an explicit error at load time
     fixture = _inside(root, m.fixture, "fixture")
     acceptance = _inside(root, m.acceptance, "acceptance")
     seeds = _inside(root, m.seeds, "seeds") if m.seeds else None
@@ -85,7 +129,7 @@ def load(project_id: str = DEFAULT_ID, projects_dir: Path = PROJECTS, root: Path
     if len(set(m.editable)) != len(m.editable):
         raise ProjectError("editable: duplicate entries")
     for d, what in ((fixture, "fixture"), (acceptance, "acceptance"), *(((seeds, "seeds"),) if seeds else ())):
-        if any(t.is_symlink() for t in d.rglob("*")):  # copytree would follow them and pull outside content in
+        if any(t.is_symlink() for t in d.rglob("*") if not is_ignored(t.relative_to(d))):  # copytree would follow them and pull outside content in
             raise ProjectError(f"{what}: symlinks are not allowed")
     names = [c.name for c in m.checks]
     if len(set(names)) != len(names):
@@ -101,7 +145,7 @@ def load(project_id: str = DEFAULT_ID, projects_dir: Path = PROJECTS, root: Path
     if unknown:
         raise ProjectError(f"requirements.json references checks the manifest does not define: {unknown}")
     return Project(m.id, fixture, seeds, acceptance, m.acceptance_dest, tuple(m.editable),
-                   tuple((c.name, c.selector) for c in m.checks), m.default_task)
+                   tuple((c.name, c.selector) for c in m.checks), m.default_task, m.ecosystem, root.resolve(), manifest.resolve())
 
 
 def all_ids(projects_dir: Path = PROJECTS) -> list[str]:

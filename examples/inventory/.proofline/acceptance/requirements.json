@@ -1,0 +1,5 @@
+[
+  {"id": "R1", "text": "Reserving returns the remaining quantity", "checks": ["acceptance_reserve_decrements"]},
+  {"id": "R2", "text": "Reserving more than is available is refused and changes nothing", "checks": ["acceptance_reserve_limit"]},
+  {"id": "R3", "text": "A quantity of zero or less is refused and changes nothing", "checks": ["acceptance_reserve_validation"]}
+]

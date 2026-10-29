@@ -109,3 +109,13 @@ def test_shouldNotConfuseARegularFileWhoseTextLooksLikeASymlinkWithTheSymlink(tm
     assert changed_files(base, work) == {"x"}
     (work / "x").unlink(); (work / "x").write_text("L:foo")
     assert changed_files(base, work) == {"x"}
+
+
+def test_shouldReportANestedTargetDirectoryAsAChange(tmp_path):
+    base, work = tmp_path / "b", tmp_path / "w"
+    for d in (base, work):
+        (d / "src").mkdir(parents=True)
+        (d / "src/A.java").write_text("a")
+    (work / "src/target").mkdir()
+    (work / "src/target/Evil.java").write_text("class Evil {}")
+    assert changed_files(base, work) == {"src/target/Evil.java"}

@@ -78,11 +78,55 @@ Without a key, a run ends `INCONCLUSIVE` with `MODEL_API_KEY is not set`; it nev
 ## Run
 
 ```bash
-.venv/bin/pytest -q                                   # 213 tests, ~9 min, needs Docker + the warm cache, no API key
+.venv/bin/pytest -q                                   # 295 tests, ~9 min, needs Docker + the warm cache, no API key
 .venv/bin/uvicorn proofline.api:app --port 8765       # then open http://localhost:8765
 ```
 
 The API is local-only and unauthenticated, and runs one job at a time. Do not expose it.
+
+## Use it on your own Maven project
+
+Proofline can verify a change in a repository of your own (Java/Maven only today), record a person's decision on it, and
+gate on that decision. Nothing here needs a model: the change can come from an agent or from you.
+
+```bash
+.venv/bin/pip install -e .          # in the Proofline clone: provides the `proofline` command
+cd /path/to/your/maven/repo
+proofline init                      # writes .proofline/project.json and .proofline/acceptance/ (a skeleton to complete)
+```
+
+Complete the skeleton: `editable` lists the files a change may touch; put your protected tests in `.proofline/acceptance/`
+(files named `Acceptance*.java`), one `checks` entry per test method (`Class#method`), and describe each requirement in
+`.proofline/acceptance/requirements.json` with the checks that cover it. The manifest is validated strictly (paths inside the repo,
+no symlinks, every selector must name a test that exists).
+
+```bash
+proofline warm                      # the one step with network: downloads dependencies; your tests must compile and pass here
+proofline verify                    # your working tree against HEAD (or --base REV, or --base DIR for a pristine copy)
+proofline serve                     # review screen on http://127.0.0.1:8765: gaps first, your decision apart from the verdict
+proofline decide approve --run RUN_ID --reason "..."     # or: reject --reason "..." (a reason is required to reject)
+proofline gate --latest             # exit 0 only if approved in exactly the current state
+```
+
+`verify` exits 0 for a fully verified `PASS`, 3 for a `PASS` with gaps, 4 for `FAIL`, 5 for `INCONCLUSIVE`. Run files are in
+`.proofline/runs/` (add it to `.gitignore` if you do not want them committed). To try it without your own project, copy
+`examples/inventory/` (it is incomplete on purpose: its protected tests fail until `Stock.reserve` refuses invalid and excessive
+reservations), `git init && git add -A && git commit` there, then run the commands above.
+
+| `gate` exit | Meaning |
+|---|---|
+| 0 | approved by a person in exactly this state (a notice is printed if it was an override) |
+| 10 / 11 | not approved yet / rejected |
+| 12 | the change, the base, the manifest or the protected tests differ from what was approved |
+| 13 | the evidence chain does not verify |
+| 14 | the run has no finished verification the gate can use |
+| 15 | approved as an override, and `--strict` was given |
+| 2 | usage error |
+
+What the decision is, precisely: a record in the same hash chain as the verification, tied to the exact change (a hash of the
+changed files, not the text of a diff) and to the scope the reviewer saw. Approving something that is not a fully verified `PASS`
+is an *override*: it needs a reason and is recorded as one. The gate does not re-run any check; it trusts an intact chain and
+recomputes the hashes. The reviewer's name is typed in, not authenticated, and the chain is unsigned (see Limitations).
 
 ## Demo scenarios
 
@@ -120,7 +164,7 @@ per task, on the discount-service fixture, three rounds of the same 10-task batt
   `PASS` was observed. That is not evidence that none can occur.
 
 Not to be confused with the test suite: the evaluation is the same 10-task battery run three times with the real model (34 runs per round, 102 runs in
-total). The automated suite is a separate set of 213 tests that needs no API key.
+total). The automated suite is a separate set of 295 tests that needs no API key.
 
 Simulated-model runs (`sim`, `sim-bad`) validate the harness and the oracle, not Muse Spark. Reproduce the real battery with
 `.venv/bin/python -m evaluations.harness real 3 S1 S2 S3 E1 E2 E3 A1 A2` and `... real 5 U1 U2`.
@@ -168,19 +212,24 @@ MODEL_CALL_BUDGET_FILE=$PWD/evidence/budget.json .venv/bin/python -m evaluations
 - **Scope.** Two small Java fixtures (a discount service and a retry policy), at most two editable files each, one model, small
   samples; the API and UI still run only the default project. No multi-language or multi-repository support, no memory, no
   multi-agent flow.
+- **Human review.** The reviewer is whoever types a name: not authenticated. A green `gate` means "approved in exactly this state
+  according to an intact record", not "verified again now". Descriptive signals (a rejected `PASS`, an approval with gaps) are counts
+  of human decisions, not a measure of how good the tests are. No hosted service, accounts or merge integration; Maven is the only
+  adapter implemented (the core calls an adapter interface, but a second ecosystem has not been written or tried).
 - **Clarification is one-shot.** `NEEDS_CLARIFICATION` ends the run; there is no reply flow yet.
 - **Spring Boot is not used.** The fixture is plain Maven + JUnit; Spring would add build time without changing what is demonstrated.
 
 ## Layout
 
 ```
-src/proofline/     orchestrator, model client, workspace, runner, verifier, evidence, API
+src/proofline/     orchestrator, model client, workspace, runner, verifier, evidence, API, CLI, review (decision + gate), adapters/
 ui/index.html      single-page UI (no build step)
+examples/          inventory: a Maven project outside the fixtures, used to try Proofline on a repository of its own
 projects/          one manifest per project (editable files, checks, protected tests)
 fixtures/          discount-service and retry-policy (editable projects) and their seeds (prepared defects)
 acceptance-tests*/ protected tests + requirements.json per project, injected by the verifier, outside the editable workspace
 evaluations/       task contracts, per-task oracles, harness, report, RESULTS.md
-tests/             213 tests (Docker is real; only the model API boundary is mocked)
+tests/             295 tests (Docker is real; only the model API boundary is mocked)
 ```
 
 Generated runs go to `evidence/` (git-ignored).

@@ -1,0 +1,12 @@
+{
+  "id": "inventory",
+  "acceptance_dest": "src/test/java/inventory",
+  "editable": ["src/main/java/inventory/Stock.java"],
+  "checks": [
+    {"name": "maven_tests", "selector": "!Acceptance*"},
+    {"name": "acceptance_reserve_decrements", "selector": "AcceptanceStockTest#shouldReturnRemainingAfterReserving"},
+    {"name": "acceptance_reserve_limit", "selector": "AcceptanceStockTest#shouldRejectReservingMoreThanAvailable"},
+    {"name": "acceptance_reserve_validation", "selector": "AcceptanceStockTest#shouldRejectNonPositiveQuantities"}
+  ],
+  "default_task": "Stock.reserve(qty) must refuse a quantity of zero or less (IllegalArgumentException) and a quantity above what is available (IllegalStateException), changing nothing when it refuses; otherwise it returns the remaining quantity."
+}

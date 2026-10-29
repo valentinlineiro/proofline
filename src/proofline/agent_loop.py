@@ -69,6 +69,28 @@ def run_task(task: str, base: Path, workspace: Path, evidence_file: Path, run_id
     return result
 
 
+def retry_after_rejection(task: str, project: Project, base: Path, repo: Path, log: EvidenceLog, run_id: str, feedback: str,
+                          attempt: int, base_ref: dict | None = None, manifest_path: Path | None = None, snap=None) -> dict:
+    """One more model attempt after a person rejected the change: `feedback` carries the reviewer's reason and the real
+    check output. The edit goes to `repo` (allowlisted like any other) and is verified again, appended to the same chain."""
+    files = {p: (repo / p).read_text() for p in project.editable}
+    usage: dict = {}
+    try:
+        proposal = model_client.propose_edits(task, files, feedback, on_usage=usage.update)
+    except model_client.ModelError as e:
+        return _inconclusive(log, run_id, log.path, str(e), usage)
+    if proposal.clarification:
+        log.append("clarification_request", attempt=attempt, question=proposal.clarification, usage=usage or NO_USAGE)
+        return {"run_id": run_id, "verdict": "NEEDS_CLARIFICATION", "question": proposal.clarification, "evidence_file": str(log.path)}
+    log.append("model_edits", attempt=attempt, proposal=proposal.model_dump(), usage=usage or NO_USAGE)
+    try:
+        apply_edits(repo, proposal.edits, project.editable)
+    except EditRejected as e:
+        log.append("edit_rejected", attempt=attempt, reason=str(e))
+        return {"run_id": run_id, "verdict": "FAIL", "error": f"edit rejected: {e}", "evidence_file": str(log.path)}
+    return verify(base, snap() if snap else repo, log.path, run_id, log=log, project=project, base_ref=base_ref, manifest_path=manifest_path)
+
+
 def run_new(task: str, seed: str | None, run_id: str, evidence_file: Path, project_id: str = DEFAULT_ID) -> dict:
     """Fresh workspace from the fixture (plus an optional prepared-defect seed), then the full loop."""
     import shutil

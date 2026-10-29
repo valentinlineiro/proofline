@@ -4,7 +4,7 @@ from pathlib import Path, PurePosixPath
 
 from pydantic import BaseModel
 
-from .project import load
+from .project import is_ignored, load
 
 # Production code the agent may touch (default project; any other project passes its own list). Anything else
 # (tests, acceptance, evidence, pom) is rejected.
@@ -51,6 +51,6 @@ def changed_files(base: Path, work: Path) -> set[str]:
         # every entry is tagged with its kind, so a symlink and a regular file can never look alike (a file whose text is
         # "symlink:foo" vs a link to foo), and links to directories are listed too: copytree would follow them
         return {str(p.relative_to(d)): (b"L:" + os.readlink(p).encode() if p.is_symlink() else b"F:" + p.read_bytes())
-                for p in d.rglob("*") if (p.is_symlink() or p.is_file()) and "target" not in p.relative_to(d).parts}
+                for p in d.rglob("*") if (p.is_symlink() or p.is_file()) and not is_ignored(p.relative_to(d))}
     a, b = tree(base), tree(work)
     return {k for k in a.keys() | b.keys() if a.get(k) != b.get(k)}
