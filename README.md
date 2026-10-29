@@ -8,6 +8,14 @@
 
 **Workflow video (73 s, narrated, captioned):** https://youtu.be/y9FQPhFn8t4 — the verify → human review → gate flow on an external Maven project; no model involved.
 
+## Built during the hackathon
+
+Proofline was built for the Meta Global AI Developer Hackathon, between **27 October and 4 November 2026**. The first commit
+(`de5c814`) is dated 27 October 2026; every line of code, test, evaluation, evidence file and demo video in this repository was produced
+in that period, and `git log` shows the order. Nothing is vendored or copied from another project; dependencies are listed in
+`pyproject.toml`. The work was done with the help of an AI coding assistant (Claude Code), which wrote code under the author's direction.
+The demo narration is a synthetic voice.
+
 Proofline lets a coding agent (Meta's Muse Spark) change a Java/Maven project, then judges the change with checks that
 the agent neither writes nor runs ("independent" means independent of the agent, not of the tests; see Limitations): protected acceptance tests executed in a network-less Docker container. The verdict is
 `PASS`, `FAIL`, `INCONCLUSIVE` or `NEEDS_CLARIFICATION`, and it comes only from the verifier and a hash-chained evidence
