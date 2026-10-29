@@ -21,7 +21,7 @@ h1{font-size:24px;letter-spacing:-.015em;margin:0;font-weight:800}
 .tag{color:var(--mute);margin:0 0 22px 46px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px;box-shadow:var(--shadow)}
 .label{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--mute);font-weight:700;margin:0 0 10px}
-textarea,select,button{font:inherit;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 12px;max-width:100%}
+textarea,input,select,button{font:inherit;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 12px;max-width:100%}
 textarea{width:100%;min-height:72px;resize:vertical;line-height:1.5}
 textarea:focus-visible,select:focus-visible,button:focus-visible,summary:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 50%,transparent);outline-offset:2px}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}.row .push{margin-left:auto}
@@ -75,6 +75,14 @@ details{margin-top:8px}summary{cursor:pointer;color:var(--mute);padding:6px 0;bo
 .add{color:var(--pass)}.del{color:var(--fail)}
 .pill{display:inline-flex;flex-wrap:wrap;gap:2px 8px;align-items:center;border:1px solid var(--line);border-radius:14px;padding:3px 12px;background:var(--card)}
 
+/* decision */
+.gap-col{border:2px solid var(--warn);background:var(--warn-bg);border-radius:12px;padding:12px 14px}
+.dec{display:grid;gap:10px}.dec input,.dec textarea{width:100%}.dec textarea{min-height:56px}
+.notice{padding:10px 12px;border-radius:10px;background:var(--warn-bg);color:var(--warn);font-weight:600}
+button.approve{background:var(--pass);color:#fff;border-color:var(--pass);font-weight:700;cursor:pointer;padding:9px 22px}
+button.reject{background:var(--fail);color:#fff;border-color:var(--fail);font-weight:700;cursor:pointer;padding:9px 22px}
+.signals{display:flex;gap:8px;flex-wrap:wrap}
+
 /* empty state */
 .legend{display:grid;gap:10px;margin-top:6px}.legend>div{display:flex;gap:12px;align-items:baseline}
 .legend b{flex:none;min-width:174px;font-size:13px}@media(max-width:560px){.legend>div{flex-direction:column;gap:2px}}
@@ -88,7 +96,7 @@ details{margin-top:8px}summary{cursor:pointer;color:var(--mute);padding:6px 0;bo
   </header>
   <p class="tag">An agent saying “done” is a claim. The checks below are the evidence.</p>
 
-  <section class="card">
+  <section class="card" id="runcard">
     <label class="label" for="task">Task for the agent</label>
     <textarea id="task"></textarea>
     <div class="row">
@@ -102,6 +110,7 @@ details{margin-top:8px}summary{cursor:pointer;color:var(--mute);padding:6px 0;bo
   <div id="live" class="sr" role="status" aria-live="polite"></div>
   <div id="verdict"></div>
   <div id="scope"></div>
+  <div id="decision"></div>
   <section class="card"><h2 class="label">What happened</h2><div id="timeline"></div></section>
   <p class="mute mono" id="chain"></p>
 </main>
@@ -126,7 +135,7 @@ let timer = null, loaded = null, announced = '', busy = false, shownState = null
 
 async function api(path, opts) { const r = await fetch(path, opts); if (!r.ok) throw new Error(((await r.json().catch(() => ({}))).detail) || r.status); return r.json(); }
 const setBusy = b => { busy = b; syncGo(); };
-const syncGo = () => { $('go').disabled = busy || !$('task').value.trim(); };
+const syncGo = () => { if ($('go')) $('go').disabled = busy || !$('task').value.trim(); };
 
 function colorDiff(text) {
   return h('pre', {}, text.split('\n').map(l => h('div', { class: l.startsWith('+') && !l.startsWith('+++') ? 'add' : l.startsWith('-') && !l.startsWith('---') ? 'del' : '' }, l || ' ')));
@@ -154,7 +163,7 @@ function render(run) {
   lastSig = sig;
   const recs = run.records;
   const task = recs.find(r => r.kind === 'task');
-  if (task && loaded !== run.run_id) {               // the form always shows the task of the run on screen
+  if (task && loaded !== run.run_id && $('task')) {               // the form always shows the task of the run on screen
     loaded = run.run_id;
     $('task').value = task.task;
     $('mode').value = task.seeded ? ($('mode').options[1] ? $('mode').options[1].value : '') : '';
@@ -213,10 +222,12 @@ function render(run) {
     sc.append(h('section', { class: 'card' }, h('h2', { class: 'label' }, `Scope of the evidence · ${verified.length} of ${scope.length} requirements verified`),
       h('div', { class: 'bar', 'aria-hidden': 'true' }, scope.map(s => h('i', { class: s.status, title: s.text }))),
       h('div', { class: 'cols' },
-        h('div', {}, h('b', {}, 'Checked'), h('ul', {}, verified.map(li)), verified.length ? null : h('div', { class: 'mute' }, 'Nothing is verified yet.')),
-        h('div', {}, h('b', {}, 'Not demonstrated'), h('ul', {}, scope.filter(s => s.status !== 'VERIFIED').map(li),
-          h('li', {}, 'Any property of the code that no check exercises.'))))));
+        h('div', { class: 'gap-col' }, h('b', {}, 'Not demonstrated'), h('ul', {}, scope.filter(s => s.status !== 'VERIFIED').map(li),
+          h('li', {}, 'Any property of the code that no check exercises.'))),
+        h('div', {}, h('b', {}, 'Checked'), h('ul', {}, verified.map(li)), verified.length ? null : h('div', { class: 'mute' }, 'Nothing is verified yet.')))));
   }
+
+  decisionCard(run, state, partial, scope, verified);
 
   // timeline, in the order things actually happened
   const tl = $('timeline'); tl.replaceChildren();
@@ -229,6 +240,7 @@ function render(run) {
     else if (r.kind === 'clarification_request') tl.append(h('div', { class: 'step model' }, h('div', { class: 'claim' }, 'Model asks for clarification'), h('div', { class: 'bubble' }, r.question)));
     else if (r.kind === 'edit_rejected') tl.append(h('div', { class: 'step warn' }, h('b', {}, 'Edit rejected by the backend'), ': ', r.reason));
     else if (r.kind === 'model_error' || r.kind === 'run_error') tl.append(h('div', { class: 'step warn' }, h('b', {}, 'Run problem'), ': ', r.error));
+    else if (r.kind === 'human_decision') tl.append(h('div', { class: 'step ' + (r.decision === 'approve' ? 'verify' : 'warn') }, h('b', {}, `Human decision: ${r.decision}`), ` by ${r.reviewer}`, r.override ? h('span', { class: 'badge NOT_CHECKED', style: 'margin-left:6px' }, 'OVERRIDE') : null, r.reason ? h('div', { class: 'bubble' }, r.reason) : null));
     else if (r.kind === 'run_start') {
       n++; tbody = h('tbody');
       vbox = h('div', { class: 'step verify' }, h('b', {}, `Independent verification #${n}`),
@@ -244,6 +256,41 @@ function render(run) {
   if (run.running && recs.length) tl.append(h('div', { class: 'step' }, h('span', { class: 'mute' }, 'Working…')));
   const tail = recs.length ? recs[recs.length - 1].sha256 : null;
   $('chain').replaceChildren(tail ? h('span', { class: 'pill' }, run.chain_valid ? '🔗 Evidence chain valid' : '⚠ Evidence chain INVALID', h('span', { class: 'mute' }, `· head ${tail.slice(0, 12)}… · ${run.run_id}`)) : '');
+}
+
+const GATE = { 0: 'the gate would pass: approved in exactly this state', 10: 'the gate would fail: not approved yet', 11: 'the gate would fail: rejected',
+  12: 'the gate would fail: the change, the manifest or the protected tests differ from what was approved', 13: 'the gate would fail: the evidence chain does not verify',
+  14: 'the gate would fail: no finished verification in this run', 15: 'the gate fails under --strict: approved as an override' };
+
+function decisionCard(run, state, partial, scope, verified) {
+  const box = $('decision'); box.replaceChildren();
+  if (state === 'RUNNING' || !run.records.some(r => r.kind === 'run_start')) return;
+  const mine = run.records.filter(r => r.kind === 'human_decision').pop();
+  const gaps = scope.length - verified.length;
+  const override = state !== 'PASS' || partial;
+  const reviewer = h('input', { id: 'reviewer', placeholder: 'Your name (not authenticated)', 'aria-label': 'Reviewer name' });
+  const reason = h('textarea', { id: 'reason', placeholder: override ? 'Reason (required: this is an override)' : 'Reason (required to reject, optional to approve)', 'aria-label': 'Reason' });
+  const note = h('span', { class: 'mute', role: 'alert' });
+  const send = async decision => {
+    note.textContent = '';
+    try {
+      await api('/api/runs/' + run.run_id + '/decision', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ decision, reason: reason.value, reviewer: reviewer.value }) });
+      lastSig = null; poll(run.run_id);
+    } catch (e) { note.textContent = e.message; }
+  };
+  const blocked = !run.chain_valid || state === 'NEEDS_CLARIFICATION';
+  box.append(h('section', { class: 'card' }, h('h2', { class: 'label' }, 'Your decision — separate from the verdict above'),
+    h('div', { class: 'dec' },
+      mine ? h('div', {}, h('b', {}, mine.decision === 'approve' ? 'Approved' : 'Rejected'), ` by ${mine.reviewer} · ${mine.time}`, mine.override ? h('span', { class: 'badge NOT_CHECKED', style: 'margin-left:6px' }, 'OVERRIDE') : null, mine.reason ? h('div', { class: 'mute' }, mine.reason) : null)
+           : h('div', { class: 'mute' }, 'No decision yet.'),
+      run.gate != null ? h('div', { class: 'mute' }, 'Gate: ' + (GATE[run.gate] || run.gate)) : null,
+      run.signals && run.signals.length ? h('div', { class: 'signals' }, run.signals.map(x => h('span', { class: 'badge NOT_CHECKED' }, x))) : null,
+      override ? h('div', { class: 'notice' }, state === 'PASS' ? `Approving with ${gaps} of ${scope.length} requirements not verified is an override and is recorded as one.`
+        : `The verdict is ${state.replace('_', ' ')}: approving is an override and is recorded as one.`) : null,
+      reviewer, reason,
+      h('div', { class: 'row', style: 'margin-top:0' },
+        h('button', Object.assign({ class: 'approve' }, blocked ? { disabled: '' } : {}), 'Approve'), h('button', Object.assign({ class: 'reject' }, blocked ? { disabled: '' } : {}), 'Reject'), note))));
+  const [a, r] = box.querySelectorAll('button'); a.onclick = () => send('approve'); r.onclick = () => send('reject');
 }
 
 function emptyState() {
@@ -274,12 +321,14 @@ $('go').onclick = async () => {
     poll(r.run_id);
   } catch (e) { $('note').textContent = e.message; setBusy(false); }
 };
-$('task').oninput = syncGo;
+if ($('task')) $('task').oninput = syncGo;
 $('history').onchange = e => e.target.value && poll(e.target.value);
 
 (async () => {
-  $('task').value = 'Apply a 10% discount when the subtotal is strictly greater than 100. The returned total must be rounded to 2 decimals using HALF_UP (round half away from zero).';
-  for (const s of await api('/api/seeds')) $('mode').append(h('option', { value: s }, `Staged scenario: seeded defect “${s}”`));
+  const mode = await api('/api/mode');
+  if (mode.repo) { $('runcard').replaceChildren(h('div', {}, h('b', {}, 'Reviewing ' + mode.repo), h('span', { class: 'mute' }, ' — runs are started with `proofline verify`; choose one to review.'), h('div', { class: 'row' }, $('history')))); }
+  else $('task').value = 'Apply a 10% discount when the subtotal is strictly greater than 100. The returned total must be rounded to 2 decimals using HALF_UP (round half away from zero).';
+  if (!mode.repo) for (const s of await api('/api/seeds')) $('mode').append(h('option', { value: s }, `Staged scenario: seeded defect “${s}”`));
   $('timeline').append(emptyState()); syncGo(); loadHistory();
 })();
 </script>
