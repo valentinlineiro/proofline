@@ -4,9 +4,7 @@
 
 **An agent saying "done" is a claim. Proofline asks for evidence.**
 
-**Demo video (2 min, with narration and captions):** https://youtu.be/1qrXtrT1ETg — scene 1 is a real Muse Spark run with a defect we prepared; scene 2 uses a simulated model.
-
-**Workflow video (73 s, narrated, captioned):** https://youtu.be/y9FQPhFn8t4 — the verify → human review → gate flow on an external Maven project; no model involved.
+**Demo video (2:37, narrated and captioned):** https://youtu.be/-1lO7nwPswk — a real Muse Spark run with a defect we prepared, then the verify → human review → gate flow on an external Maven project (no model in the second part).
 
 ## Built during the hackathon
 
