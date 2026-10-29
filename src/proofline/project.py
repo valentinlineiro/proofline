@@ -35,6 +35,7 @@ class _Manifest(_Strict):
     editable: list[str] = Field(min_length=1)
     checks: list[_Check] = Field(min_length=1)
     default_task: str = Field(min_length=1)
+    ecosystem: str = "java-maven"
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,7 @@ class Project:
     editable: tuple[str, ...]            # the only files the agent may change, relative to the fixture
     checks: tuple[tuple[str, str], ...]  # (check name, surefire selector)
     default_task: str
+    ecosystem: str = "java-maven"
 
 
 def _inside(base: Path, rel: str, what: str) -> Path:
@@ -69,6 +71,8 @@ def load(project_id: str = DEFAULT_ID, projects_dir: Path = PROJECTS, root: Path
         raise ProjectError(f"unknown project: {project_id!r}") from None
     except ValueError as e:  # malformed JSON, unknown keys, wrong types
         raise ProjectError(f"invalid manifest {f.name}: {e}") from e
+    from .adapters import get_adapter
+    get_adapter(m.ecosystem)  # an unknown ecosystem is an explicit error at load time
     if m.id != project_id:
         raise ProjectError(f"manifest {f.name} declares id {m.id!r}")
     fixture = _inside(root, m.fixture, "fixture")
@@ -101,7 +105,7 @@ def load(project_id: str = DEFAULT_ID, projects_dir: Path = PROJECTS, root: Path
     if unknown:
         raise ProjectError(f"requirements.json references checks the manifest does not define: {unknown}")
     return Project(m.id, fixture, seeds, acceptance, m.acceptance_dest, tuple(m.editable),
-                   tuple((c.name, c.selector) for c in m.checks), m.default_task)
+                   tuple((c.name, c.selector) for c in m.checks), m.default_task, m.ecosystem)
 
 
 def all_ids(projects_dir: Path = PROJECTS) -> list[str]:

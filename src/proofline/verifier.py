@@ -8,6 +8,8 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from .adapters import get_adapter
+from .adapters.maven import classify  # noqa: F401  (re-exported: tests and callers import it from here)
 from .change import change_hash, inputs_hash
 from .evidence import EvidenceLog, sha256
 from .project import Project, load
@@ -26,17 +28,6 @@ class Check:
     name: str
     status: str
     exit_code: int
-
-
-def classify(r: RunResult) -> str:
-    ran = [int(n) for n in re.findall(r"Tests run: (\d+), Failures", r.stdout)]
-    if r.timed_out or r.exit_code in (125, 126, 127) or r.exit_code == -1:
-        return "INCONCLUSIVE"
-    if r.exit_code == 0:
-        return "PASS" if ran and ran[-1] > 0 else "INCONCLUSIVE"  # green with zero tests proves nothing
-    if r.exit_code == 1 and ("COMPILATION ERROR" in r.stdout or "FAILURE!" in r.stdout):
-        return "FAIL"
-    return "INCONCLUSIVE"  # e.g. dependency resolution failed: infra, not code
 
 
 def requirement_scope(requirements: list[dict], ran: dict[str, str]) -> list[dict]:
@@ -78,6 +69,7 @@ def verify(base: Path, workspace: Path, evidence_file: Path, run_id: str = "run"
     recompute the canonical change hash later. `project` None = the default project, with the module-level CHECKS / ACCEPTANCE_DIR (patchable by the harness)."""
     allowed, checks_to_run, acceptance, dest_rel = ((project.editable, project.checks, project.acceptance, project.acceptance_dest)
                                                     if project else (ALLOWED, CHECKS, ACCEPTANCE_DIR, _DEFAULT.acceptance_dest))
+    adapter = get_adapter(project.ecosystem if project else _DEFAULT.ecosystem)
     log = log or EvidenceLog(evidence_file)
     patch = diff(base, workspace)
     base_rev = tree_hash(base)
@@ -108,8 +100,8 @@ def verify(base: Path, workspace: Path, evidence_file: Path, run_id: str = "run"
             dest.mkdir(parents=True, exist_ok=True)
             for t in acceptance.glob("*.java"):
                 shutil.copy(t, dest / t.name)
-            r = run_maven(sandbox, ["test", f"-Dtest={selector}", "-Dsurefire.failIfNoSpecifiedTests=true"])
-            status = classify(r)
+            r = adapter.run_check(sandbox, selector, run=run_maven)
+            status = adapter.classify(r)
             checks.append(Check(name, status, r.exit_code))
             if status == "FAIL":
                 failures.append({"name": name, "tail": r.stdout[-1500:]})
