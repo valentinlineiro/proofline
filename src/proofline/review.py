@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
-from .change import change_hash, inputs_hash
+from .change import change_hash, inputs_hash, snapshot
 from .evidence import EvidenceLog, verify_chain
 from .project import ProjectError, load_external
 from .verifier import tree_hash
@@ -92,6 +92,7 @@ def _materialise_base(repo: Path, ref: dict, into: Path) -> Path:
         tar = subprocess.run(["git", "-C", str(repo), "archive", ref["rev"]], capture_output=True)
         if tar.returncode:
             raise ReviewError("the base revision is not in this repository")
+        into.mkdir(parents=True, exist_ok=True)
         subprocess.run(["tar", "-x", "-C", str(into)], input=tar.stdout, check=True)
         return into
     raise ReviewError("the verification does not say which base it was taken against")
@@ -114,8 +115,9 @@ def gate(run_file: Path, repo: Path, strict: bool = False) -> int:
     try:
         project = load_external(repo)
         with tempfile.TemporaryDirectory(prefix="proofline-gate-") as tmp:
-            base = _materialise_base(repo, v.get("base_ref") or {}, Path(tmp))
-            same = (tree_hash(base) == v["base_revision"] and change_hash(base, repo.resolve()) == last["change_sha256"] == v["change_sha256"]
+            base = _materialise_base(repo, v.get("base_ref") or {}, Path(tmp) / "base")
+            work = snapshot(repo.resolve(), Path(tmp) / "snapshot")
+            same = (tree_hash(base) == v["base_revision"] and change_hash(base, work) == last["change_sha256"] == v["change_sha256"]
                     and inputs_hash(project.manifest, project.acceptance) == v.get("inputs_sha256"))
     except (ProjectError, ReviewError, OSError, subprocess.CalledProcessError):
         return CHANGED

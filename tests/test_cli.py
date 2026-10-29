@@ -194,3 +194,32 @@ def test_shouldRecordReasonOnlyWhenAttemptsAreExhausted(repo, budget):
     code, model = retry(repo, run)
     assert code == 2 and model.call_count == 0
     assert cli.main(["gate", "--repo", str(repo), "--run", run]) == review.REJECTED  # the reason is recorded, nothing else happens
+
+
+# ---- fixes from the final review ----
+def test_shouldGenerateRunIdsTheApiAccepts(repo):
+    import re
+    verify(repo)
+    assert re.fullmatch(r"[a-z0-9-]{1,40}", runs(repo)[0].stem)
+
+
+def test_shouldNotFailOrLeakWhenAGitIgnoredFileExists(repo):
+    (repo / ".gitignore").write_text(".env\n")
+    git(repo, "add", ".gitignore")
+    git(repo, "commit", "-qm", "ignore env")
+    (repo / ".env").write_text("SECRET=hunter2")
+    assert verify(repo) == 0
+    run = runs(repo)[0]
+    assert "hunter2" not in run.read_text()
+    cli.main(["decide", "approve", "--repo", str(repo), "--run", run.stem])
+    assert cli.main(["gate", "--repo", str(repo), "--run", run.stem]) == review.OK
+
+
+def test_shouldPickLatestRunByIdNotByModificationTime(repo):
+    verify(repo)
+    verify(repo)
+    older, newer = sorted(runs(repo), key=lambda p: p.stem)
+    os.utime(newer, (1, 1))   # a CI checkout gives every file the same mtime; mtime must not decide
+    os.utime(older, (2, 2))
+    cli.main(["decide", "approve", "--repo", str(repo), "--run", newer.stem])
+    assert cli.main(["gate", "--repo", str(repo), "--latest"]) == review.OK

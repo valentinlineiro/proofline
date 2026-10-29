@@ -14,6 +14,11 @@ ID_RE = r"[a-z0-9][a-z0-9-]*"
 IGNORED_DIRS = ("target", ".git", ".proofline")  # build output, VCS and Proofline's own records are never part of a change
 
 
+def is_ignored(rel: Path) -> bool:
+    """Only the repository's own top-level directories are ignored: `src/main/java/p/target/X.java` is source and counts."""
+    return bool(rel.parts) and rel.parts[0] in IGNORED_DIRS
+
+
 class ProjectError(Exception):
     pass
 
@@ -124,7 +129,7 @@ def _build(m: _Manifest, root: Path, manifest: Path) -> Project:
     if len(set(m.editable)) != len(m.editable):
         raise ProjectError("editable: duplicate entries")
     for d, what in ((fixture, "fixture"), (acceptance, "acceptance"), *(((seeds, "seeds"),) if seeds else ())):
-        if any(t.is_symlink() for t in d.rglob("*") if not set(IGNORED_DIRS) & set(t.relative_to(d).parts)):  # copytree would follow them and pull outside content in
+        if any(t.is_symlink() for t in d.rglob("*") if not is_ignored(t.relative_to(d))):  # copytree would follow them and pull outside content in
             raise ProjectError(f"{what}: symlinks are not allowed")
     names = [c.name for c in m.checks]
     if len(set(names)) != len(names):

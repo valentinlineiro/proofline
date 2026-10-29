@@ -218,3 +218,11 @@ def test_shouldLabelSignals(tmp_path):
     assert review.signals(fail.records()) == ["APPROVED_FAIL"]
     assert review.signals(inc.records()) == ["APPROVED_INCONCLUSIVE"]
     assert review.signals(clean.records()) == []
+
+
+def test_shouldExit12WhenAFileIsAddedUnderANestedTargetDirectory(run):
+    run.approve()
+    nested = run.repo / "src/main/java/shop/target"
+    nested.mkdir()
+    (nested / "Evil.java").write_text("package shop.target; class Evil {}")
+    assert run.gate() == review.CHANGED  # only <repo>/target is build output

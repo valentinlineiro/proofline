@@ -100,3 +100,46 @@ def test_shouldRecordCanonicalHashesInRunStartWhenVerifying(tmp_path):
     assert start["inputs_sha256"] == inputs_hash(PROJECTS / "discount-service.json", project.acceptance)
     assert start["base_ref"] == {"kind": "dir", "path": str(project.fixture)}
     assert "diff_sha256" in start
+
+
+# ---- fixes from the final review ----
+def test_shouldCountNestedTargetGitAndProoflineDirectories(tmp_path):
+    base, work = pair(tmp_path, {"src/A.java": "a", "pom.xml": "p"})
+    clean = change_hash(base, work)
+    seen = {clean}
+    for d in ("target", ".git", ".proofline"):
+        (work / "src" / d).mkdir()
+        (work / "src" / d / "X.java").write_text("class X {}")
+        h = change_hash(base, work)
+        assert h not in seen, d  # build output is only <repo>/target, not every directory with that name
+        seen.add(h)
+
+
+def test_shouldHashOnlyTheExecutableBit(tmp_path):
+    base, work = pair(tmp_path)
+    (work / "src/A.java").write_text("changed")
+    os.chmod(work / "src/A.java", 0o664)
+    h664 = change_hash(base, work)
+    os.chmod(work / "src/A.java", 0o644)
+    assert change_hash(base, work) == h664  # umask 002 vs 022 must not matter
+    os.chmod(work / "src/A.java", 0o755)
+    assert change_hash(base, work) != h664
+
+
+def test_shouldSnapshotTheWorkingTreeWithoutGitIgnoredFiles(tmp_path):
+    import subprocess
+
+    from proofline.change import snapshot
+    repo = tmp_path / "repo"
+    (repo / "src").mkdir(parents=True)
+    (repo / ".gitignore").write_text(".env\n")
+    (repo / "src/Kept.java").write_text("k")
+    (repo / "src/Gone.java").write_text("g")
+    for c in (["init", "-q"], ["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "b"]):
+        subprocess.run(["git", "-C", str(repo), *c], check=True)
+    (repo / ".env").write_text("SECRET=hunter2")
+    (repo / "src/New.java").write_text("n")
+    (repo / "src/Gone.java").unlink()
+    out = snapshot(repo, tmp_path / "snap")
+    files = sorted(p.relative_to(out).as_posix() for p in out.rglob("*") if p.is_file())
+    assert files == [".gitignore", "src/Kept.java", "src/New.java"]

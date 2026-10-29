@@ -70,7 +70,7 @@ def run_task(task: str, base: Path, workspace: Path, evidence_file: Path, run_id
 
 
 def retry_after_rejection(task: str, project: Project, base: Path, repo: Path, log: EvidenceLog, run_id: str, feedback: str,
-                          attempt: int, base_ref: dict | None = None, manifest_path: Path | None = None) -> dict:
+                          attempt: int, base_ref: dict | None = None, manifest_path: Path | None = None, snap=None) -> dict:
     """One more model attempt after a person rejected the change: `feedback` carries the reviewer's reason and the real
     check output. The edit goes to `repo` (allowlisted like any other) and is verified again, appended to the same chain."""
     files = {p: (repo / p).read_text() for p in project.editable}
@@ -88,7 +88,7 @@ def retry_after_rejection(task: str, project: Project, base: Path, repo: Path, l
     except EditRejected as e:
         log.append("edit_rejected", attempt=attempt, reason=str(e))
         return {"run_id": run_id, "verdict": "FAIL", "error": f"edit rejected: {e}", "evidence_file": str(log.path)}
-    return verify(base, repo, log.path, run_id, log=log, project=project, base_ref=base_ref, manifest_path=manifest_path)
+    return verify(base, snap() if snap else repo, log.path, run_id, log=log, project=project, base_ref=base_ref, manifest_path=manifest_path)
 
 
 def run_new(task: str, seed: str | None, run_id: str, evidence_file: Path, project_id: str = DEFAULT_ID) -> dict:

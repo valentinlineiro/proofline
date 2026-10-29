@@ -9,6 +9,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, StringConstraints
 from typing import Annotated, Literal
@@ -23,6 +24,8 @@ REPO = Path(os.environ["PROOFLINE_REPO"]) if os.environ.get("PROOFLINE_REPO") el
 EVIDENCE = REPO / ".proofline" / "runs" if REPO else ROOT / "evidence" / "ui"
 SEEDS = ROOT / "fixtures" / "seeds"
 app = FastAPI(title="Proofline")
+# a web page must not be able to drive this local API by rebinding its own domain to 127.0.0.1 ("testserver" is the test client)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]", "testserver"])
 _running: dict[str, bool] = {}   # run_id -> still running
 _lock = threading.Lock()         # one run at a time: each run uses Docker and the model
 

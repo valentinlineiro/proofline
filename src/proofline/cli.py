@@ -12,6 +12,7 @@ from pathlib import Path
 
 from . import review
 from .adapters import get_adapter
+from .change import snapshot
 from .evidence import EvidenceLog
 from .project import ID_RE, ProjectError, load_external
 from .verifier import verify
@@ -75,14 +76,15 @@ def cmd_verify(a) -> int:
                 print("give --base REV (a git revision) or --base DIR (a pristine copy)", file=sys.stderr)
                 return 2
             tar = subprocess.run(["git", "-C", str(repo), "archive", sha], capture_output=True, check=True)
-            subprocess.run(["tar", "-x", "-C", tmp], input=tar.stdout, check=True)
-            base, ref = Path(tmp), {"kind": "git", "rev": sha}
-        run_id = f"run-{datetime.now(timezone.utc):%Y%m%dT%H%M%S}-{secrets.token_hex(2)}"
+            (Path(tmp) / "base").mkdir()
+            subprocess.run(["tar", "-x", "-C", str(Path(tmp) / "base")], input=tar.stdout, check=True)
+            base, ref = Path(tmp) / "base", {"kind": "git", "rev": sha}
+        run_id = f"run-{datetime.now(timezone.utc):%Y%m%dt%H%M%S}-{secrets.token_hex(2)}"  # lowercase: the API accepts [a-z0-9-]
         f = _runs(repo) / f"{run_id}.jsonl"
         f.parent.mkdir(parents=True, exist_ok=True)
         log = EvidenceLog(f)
         log.append("task", task=a.task or p.default_task, source="human", project=p.id)
-        result = verify(base, repo, f, run_id, log=log, project=p, base_ref=ref, manifest_path=p.manifest)
+        result = verify(base, snapshot(repo, Path(tmp) / "snapshot"), f, run_id, log=log, project=p, base_ref=ref, manifest_path=p.manifest)
     print(f"{result['verdict']}  fully_verified={result['fully_verified']}  run={run_id}")
     for s in result["scope"]:
         print(f"  {s['status']:<13} {s['id']}  {s['text']}")
@@ -94,7 +96,7 @@ def _run_file(a) -> Path | None:
     repo = Path(a.repo).resolve()
     if a.run:
         return _runs(repo) / f"{a.run}.jsonl"
-    files = sorted(_runs(repo).glob("*.jsonl"), key=lambda p: p.stat().st_mtime) if _runs(repo).exists() else []
+    files = sorted(_runs(repo).glob("*.jsonl"), key=lambda p: p.stem) if _runs(repo).exists() else []
     return files[-1] if files else None
 
 
@@ -152,9 +154,9 @@ def cmd_retry(a) -> int:
     feedback = "\n\n".join([f"A reviewer rejected the last change: {decisions[-1]['reason']}", *failing] + (["Not verified:\n" + "\n".join(gaps)] if gaps else []))
     task = next(r["task"] for r in records if r["kind"] == "task")
     with _tf.TemporaryDirectory(prefix="proofline-base-") as tmp:
-        base = review._materialise_base(repo, v.get("base_ref") or {}, Path(tmp))
+        base = review._materialise_base(repo, v.get("base_ref") or {}, Path(tmp) / "base")
         result = agent_loop.retry_after_rejection(task, p, base, repo, EvidenceLog.resume(f), f"{v['run_id']}.r{attempts + 1}", feedback,
-                                                  attempts, v.get("base_ref"), p.manifest)
+                                                  attempts, v.get("base_ref"), p.manifest, snap=lambda: snapshot(repo, Path(tmp) / "snapshot"))
     print(f"{result['verdict']}  run={f.stem}  (decide on it again, then gate)")
     return 0 if result["verdict"] in ("PASS", "FAIL") else 5
 

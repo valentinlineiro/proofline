@@ -14,7 +14,8 @@ from .change import change_hash, inputs_hash
 from .evidence import EvidenceLog, sha256
 from .project import Project, load
 from .runner import RunResult, run_maven
-from .workspace import ALLOWED, IGNORED_DIRS, changed_files
+from .project import IGNORED_DIRS, is_ignored
+from .workspace import ALLOWED, changed_files
 
 ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT = load()
@@ -54,7 +55,7 @@ def load_requirements(acceptance_dir: Path | None = None) -> list[dict]:
 
 
 def tree_hash(d: Path) -> str:
-    files = sorted(p for p in d.rglob("*") if p.is_file() and not set(IGNORED_DIRS) & set(p.relative_to(d).parts))
+    files = sorted(p for p in d.rglob("*") if p.is_file() and not is_ignored(p.relative_to(d)))
     return sha256("".join(f"{p.relative_to(d)}:{sha256(p.read_bytes())}\n" for p in files))
 
 
@@ -94,7 +95,7 @@ def verify(base: Path, workspace: Path, evidence_file: Path, run_id: str = "run"
         for i, (name, selector) in enumerate(checks_to_run):
             # one pristine sandbox per check: nothing a check leaves behind (files, target/) reaches the next one
             sandbox = Path(tmp) / f"w{i}"
-            shutil.copytree(workspace, sandbox, ignore=shutil.ignore_patterns(*IGNORED_DIRS))
+            shutil.copytree(workspace, sandbox, ignore=lambda d, names: IGNORED_DIRS if Path(d) == workspace else ())  # root-level only
             # inject protected tests last so the workspace cannot shadow or alter them
             dest = sandbox / dest_rel
             dest.mkdir(parents=True, exist_ok=True)

@@ -75,3 +75,10 @@ def test_shouldRejectSelectorThatNamesNoTestInExternalRepo(repo):
 def test_shouldLoadBundledProjectsWithTheProoflineRepoAsRoot():
     p = load()
     assert p.root == ROOT.resolve() and p.manifest.name == "discount-service.json"
+
+
+def test_shouldRejectSymlinkInsideANestedTargetDirectory(repo, tmp_path):
+    (repo / "src/main/java/shop/target").mkdir()
+    (repo / "src/main/java/shop/target/Link.java").symlink_to(tmp_path)
+    with pytest.raises(ProjectError, match="symlink"):
+        load_external(repo)

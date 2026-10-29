@@ -76,3 +76,23 @@ def test_shouldNotStartRunsInRepoMode(tmp_path, monkeypatch):
     c = TestClient(api.app)
     assert c.get("/api/mode").json() == {"repo": tmp_path.name}
     assert c.post("/api/runs", json={"task": "t"}).status_code == 409
+
+
+# ---- fixes from the final review ----
+from tests.test_cli import repo, runs, verify  # noqa: E402,F401  (fixtures and helpers: a real run created by the CLI)
+
+
+def test_shouldOpenAndDecideOnARunCreatedByTheCli(repo, monkeypatch):
+    verify(repo)
+    run = runs(repo)[0].stem
+    monkeypatch.setattr(api, "EVIDENCE", repo / ".proofline/runs")
+    monkeypatch.setattr(api, "REPO", repo)
+    c = TestClient(api.app)
+    assert c.get(f"/api/runs/{run}").status_code == 200
+    assert c.post(f"/api/runs/{run}/decision", json={"decision": "approve", "reviewer": "ana"}).status_code == 200
+    assert c.get(f"/api/runs/{run}").json()["gate"] == review.OK
+
+
+def test_shouldRefuseRequestsWithAForeignHostHeader(client):
+    assert client.get("/api/mode", headers={"host": "evil.example"}).status_code == 400
+    assert client.get("/api/mode", headers={"host": "localhost:8765"}).status_code == 200
